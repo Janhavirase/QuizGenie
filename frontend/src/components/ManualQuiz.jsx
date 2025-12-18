@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, CheckCircle, ArrowRight, Play, FileText, List } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, ArrowRight, Play, FileText, List, PieChart, BarChart, LayoutGrid } from 'lucide-react';
 
 const ManualCreator = () => {
   const navigate = useNavigate();
@@ -13,6 +13,8 @@ const ManualCreator = () => {
   const [qText, setQText] = useState("");
   const [options, setOptions] = useState(["", "", "", ""]); 
   const [correctIndex, setCorrectIndex] = useState(0); 
+  // ✅ NEW: Visualization Selection
+  const [vizType, setVizType] = useState('bar'); 
 
   // --- ACTIONS ---
   const handleOptionChange = (index, value) => {
@@ -26,15 +28,15 @@ const ManualCreator = () => {
     if (options.some(opt => !opt.trim())) return alert("Please fill in all options.");
 
     const newQuestion = {
-      id: Date.now(), // Temp ID
+      id: Date.now(),
       type: 'mcq',
-      question: qText, // Use 'question' key to match Editor format
+      question: qText,
       options: options,
-      correctAnswer: options[correctIndex],
+      correctAnswer: options[correctIndex], // ✅ Saves the text of the selected radio button
       layout: 'centered',
       bgColor: '#111827',
       textColor: '#ffffff',
-      visualization: 'bar',
+      visualization: vizType, // ✅ Saves your chosen graph type
       showPercentage: true,
       reactions: ['like', 'love', 'cat']
     };
@@ -45,6 +47,7 @@ const ManualCreator = () => {
     setQText("");
     setOptions(["", "", "", ""]);
     setCorrectIndex(0);
+    setVizType('bar'); // Reset to default
   };
 
   const deleteQuestion = (index) => {
@@ -52,12 +55,11 @@ const ManualCreator = () => {
     setQuestions(newList);
   };
 
-  // --- INTEGRATION WITH SURVEY CREATOR ---
   const handleFinalize = () => {
     if (questions.length === 0) return alert("Add at least one question!");
     if (!topic.trim()) return alert("Please enter a Quiz Topic at the top!");
 
-    // 1. Generate Standard Intro Slides
+    // 1. Title Slide
     const slideTitle = {
         id: 1,
         type: 'info',
@@ -68,6 +70,7 @@ const ManualCreator = () => {
         textColor: '#ffffff'
     };
 
+    // 2. Rules Slide (Mentioning the Timer)
     const slideRules = {
         id: 2,
         type: 'info',
@@ -75,31 +78,27 @@ const ManualCreator = () => {
         question: "Quiz Rules",
         options: [
             `This quiz contains ${questions.length} questions.`,
-            "You have 20 seconds per question.",
-            "Points are awarded for speed and accuracy.",
-            "Good luck!"
+            "20 seconds per MCQ question.",
+            "30 seconds for Open Ended questions.",
+            "Points awarded for speed and accuracy.",
+            "The teacher has no control—speed matters!"
         ],
         bgColor: '#ffffff',
         textColor: '#000000'
     };
 
-    // 2. Combine Everything
     const fullTemplate = {
         slides: [slideTitle, slideRules, ...questions]
     };
 
-    // 3. Navigate to Editor for Final Review
     navigate('/create-survey', { state: { template: fullTemplate } });
   };
 
   return (
     <div className="min-h-screen bg-black text-white p-8 font-sans flex flex-col items-center relative overflow-hidden">
       
-      {/* Background Ambience */}
       <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 pointer-events-none"></div>
-      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
-      {/* HEADER */}
       <div className="w-full max-w-6xl flex justify-between items-center mb-10 z-10">
         <div>
             <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-400">
@@ -112,29 +111,32 @@ const ManualCreator = () => {
         </button>
       </div>
 
-      {/* MAIN CONTENT GRID */}
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 z-10">
         
-        {/* --- LEFT: EDITOR (7 cols) --- */}
+        {/* --- LEFT: EDITOR --- */}
         <div className="lg:col-span-7 space-y-6">
             
-            {/* Topic Input */}
             <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border border-gray-800">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 block">Quiz Topic</label>
                 <input 
                     type="text" 
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    placeholder="Enter Quiz Title (e.g. Physics Final)"
+                    placeholder="Enter Quiz Title"
                     className="w-full bg-transparent text-2xl font-bold text-white placeholder-gray-600 border-b border-gray-700 focus:border-blue-500 outline-none pb-2 transition"
                 />
             </div>
 
-            {/* Question Editor */}
             <div className="bg-gray-900/80 backdrop-blur-md p-8 rounded-3xl border border-gray-800 shadow-2xl">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold flex items-center gap-2"><Plus className="text-blue-500"/> New Question</h2>
-                    <span className="text-xs font-bold bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full">Multiple Choice</span>
+                    
+                    {/* ✅ VISUALIZATION SELECTOR */}
+                    <div className="flex bg-gray-800 rounded-lg p-1">
+                        <button onClick={() => setVizType('bar')} className={`p-2 rounded ${vizType === 'bar' ? 'bg-blue-600 text-white' : 'text-gray-400'}`} title="Bar Chart"><BarChart size={16}/></button>
+                        <button onClick={() => setVizType('pie')} className={`p-2 rounded ${vizType === 'pie' ? 'bg-blue-600 text-white' : 'text-gray-400'}`} title="Pie Chart"><PieChart size={16}/></button>
+                        <button onClick={() => setVizType('dots')} className={`p-2 rounded ${vizType === 'dots' ? 'bg-blue-600 text-white' : 'text-gray-400'}`} title="Dots"><LayoutGrid size={16}/></button>
+                    </div>
                 </div>
 
                 <div className="space-y-4">
@@ -177,7 +179,7 @@ const ManualCreator = () => {
             </div>
         </div>
 
-        {/* --- RIGHT: PREVIEW (5 cols) --- */}
+        {/* --- RIGHT: PREVIEW --- */}
         <div className="lg:col-span-5 flex flex-col h-full min-h-[500px]">
             <div className="bg-gray-900 border border-gray-800 rounded-3xl flex flex-col h-full overflow-hidden shadow-2xl">
                 <div className="p-6 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md flex justify-between items-center">
@@ -195,7 +197,13 @@ const ManualCreator = () => {
                         questions.map((q, i) => (
                             <div key={i} className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 hover:border-gray-500 transition group relative">
                                 <div className="flex justify-between items-start mb-2">
-                                    <span className="text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded">Q{i+1}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded">Q{i+1}</span>
+                                        {/* Show Visualization Icon in List */}
+                                        <span className="text-gray-500">
+                                            {q.visualization === 'pie' ? <PieChart size={12}/> : q.visualization === 'dots' ? <LayoutGrid size={12}/> : <BarChart size={12}/>}
+                                        </span>
+                                    </div>
                                     <button onClick={() => deleteQuestion(i)} className="text-gray-600 hover:text-red-400 transition">
                                         <Trash2 size={16}/>
                                     </button>

@@ -121,8 +121,8 @@ io.on('connection', (socket) => {
         io.to(data.roomCode).emit("reaction_received", data);
     });
 
-    // 6. SUBMIT ANSWER
-    socket.on('submit_answer', ({ roomId, playerName, answer }) => {
+  // 6. SUBMIT ANSWER
+    socket.on('submit_answer', ({ roomId, playerName, answer, timeLeft }) => { // ✅ Added timeLeft
         const room = rooms[roomId];
         if (room) {
             const player = room.players.find(p => p.name === playerName);
@@ -133,28 +133,20 @@ io.on('connection', (socket) => {
                 if (!room.stats) room.stats = {};
 
                 let statsKey = answer;
-
-                // Pin on Image handling
-                if (typeof answer === 'object' && answer.x !== undefined) {
-                    statsKey = null; 
-                } 
-                // Ranking handling
-                else if (Array.isArray(answer)) {
-                    statsKey = answer.join(" → "); 
-                }
+                if (typeof answer === 'object' && answer.x !== undefined) statsKey = null; 
+                else if (Array.isArray(answer)) statsKey = answer.join(" → "); 
 
                 if (statsKey) {
-                    if (room.stats[statsKey]) {
-                        room.stats[statsKey] += 1;
-                    } else {
-                        room.stats[statsKey] = 1;
-                    }
+                    room.stats[statsKey] = (room.stats[statsKey] || 0) + 1;
                 }
 
-                // Scoring
+                // --- 🏆 NEW SCORING LOGIC (Speed + Accuracy) ---
                 const currentQ = room.questions[room.currentQuestionIndex];
                 if (currentQ && currentQ.correctAnswer && currentQ.correctAnswer === answer) {
-                    player.score += 10;
+                    // Base points (100) + Speed Bonus (10 points per second remaining)
+                    // If no timer (surveys), just give 100
+                    const timeBonus = timeLeft ? (timeLeft * 10) : 0;
+                    player.score += (100 + timeBonus);
                 }
 
                 io.to(roomId).emit('update_stats', room.stats);
@@ -162,7 +154,6 @@ io.on('connection', (socket) => {
             }
         }
     });
-
     // 7. HANDLE DISCONNECT
     socket.on('disconnect', () => {
         console.log(`❌ User Disconnected: ${socket.id}`);

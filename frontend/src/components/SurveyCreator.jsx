@@ -242,6 +242,10 @@ const SurveyCreator = () => {
     if (!currentSlide.question.trim()) return alert("⚠️ Slide is empty!");
     addToHistory('Live');
     
+    // ✅ 1. DETECT MODE
+    // If state has mode 'quiz', keep it. Otherwise default to 'survey'.
+    const gameMode = location.state?.mode || 'survey'; 
+
     socket.emit("create_room", { 
         roomCode, 
         topic: slides[0].question,
@@ -250,10 +254,8 @@ const SurveyCreator = () => {
             type: s.type,
             options: s.options,
             image: s.image,
-            correctAnswer: s.correctAnswer, // Ensure correct answer is passed for scoring!
-            // ✅ ADD THIS LINE 👇
+            correctAnswer: s.correctAnswer, 
             layout: s.layout, 
-            // ----------------
             style: { 
                 bgColor: s.bgColor, 
                 textColor: s.textColor,
@@ -263,8 +265,14 @@ const SurveyCreator = () => {
             allowedReactions: s.reactions || []
         })) 
     });
+   // ✅ 2. PASS MODE TO GAME ROOM
     navigate(`/game/${roomCode}`, { 
-        state: { role: 'host', name: 'Presenter', hasQuestions: true } 
+        state: { 
+            role: 'host', 
+            name: 'Presenter', 
+            hasQuestions: true,
+            mode: gameMode // <--- PASSING THE MODE
+        } 
     });
   };
 
