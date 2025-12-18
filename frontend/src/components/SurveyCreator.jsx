@@ -43,7 +43,6 @@ const VISUALIZATION_OPTS = [
     { id: 'dots', label: 'Dots', icon: <LayoutGrid size={20}/> },
 ];
 
-// --- REACTION CONFIGURATION ---
 const AVAILABLE_REACTIONS = [
     { id: 'cat', icon: <Cat size={20}/>, label: 'Cat' },
     { id: 'love', icon: <Heart size={20}/>, label: 'Love' },
@@ -52,7 +51,6 @@ const AVAILABLE_REACTIONS = [
     { id: 'dislike', icon: <ThumbsDown size={20}/>, label: 'Dislike' },
 ];
 
-// --- HELPER COMPONENT: RENDER MOCK CHART ---
 const RenderMockChart = ({ type, options, showPercentage, textColor }) => {
     const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
     const data = options.map((opt, i) => ({
@@ -143,7 +141,9 @@ const SurveyCreator = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [recentItems, setRecentItems] = useState([]);
 
-  // DEFAULT BLANK SLIDE
+  // ✅ CAPTURE MODE: Defaults to 'survey', but respects 'quiz' if passed
+  const [sessionMode, setSessionMode] = useState(location.state?.mode || 'survey');
+
   const BLANK_SLIDE = {
       id: 1,
       question: "",
@@ -160,7 +160,6 @@ const SurveyCreator = () => {
   };
 
   const [slides, setSlides] = useState([BLANK_SLIDE]);
-
   const currentSlide = slides[activeSlide] || slides[0];
   
   const updateSlide = (key, value) => {
@@ -169,7 +168,6 @@ const SurveyCreator = () => {
       setSlides(newSlides);
   };
 
-  // ✅ UPDATED: Apply Theme to ALL slides
   const applyTheme = (theme) => {
       const newSlides = slides.map(slide => ({
           ...slide,
@@ -178,7 +176,7 @@ const SurveyCreator = () => {
       }));
       setSlides(newSlides);
   };
-  // --- REACTION TOGGLER ---
+
   const toggleReaction = (reactionId) => {
       const currentReactions = currentSlide.reactions || [];
       let newReactions;
@@ -242,9 +240,9 @@ const SurveyCreator = () => {
     if (!currentSlide.question.trim()) return alert("⚠️ Slide is empty!");
     addToHistory('Live');
     
-    // ✅ 1. DETECT MODE
-    // If state has mode 'quiz', keep it. Otherwise default to 'survey'.
-    const gameMode = location.state?.mode || 'survey'; 
+    // ✅ CRITICAL FIX: Use the STATE variable 'sessionMode', NOT location.state directly
+    // This ensures that if we are in 'quiz' mode, we stay in 'quiz' mode.
+    const finalMode = sessionMode;
 
     socket.emit("create_room", { 
         roomCode, 
@@ -254,7 +252,7 @@ const SurveyCreator = () => {
             type: s.type,
             options: s.options,
             image: s.image,
-            correctAnswer: s.correctAnswer, 
+            correctAnswer: s.correctAnswer, // ✅ This must be passed!
             layout: s.layout, 
             style: { 
                 bgColor: s.bgColor, 
@@ -265,13 +263,14 @@ const SurveyCreator = () => {
             allowedReactions: s.reactions || []
         })) 
     });
-   // ✅ 2. PASS MODE TO GAME ROOM
+    
+    // ✅ PASS THE MODE TO GAME ROOM
     navigate(`/game/${roomCode}`, { 
         state: { 
             role: 'host', 
             name: 'Presenter', 
             hasQuestions: true,
-            mode: gameMode // <--- PASSING THE MODE
+            mode: finalMode // <--- Sending the correct mode
         } 
     });
   };
@@ -335,12 +334,15 @@ const SurveyCreator = () => {
     }
   };
 
+  // ✅ INITIALIZATION: Load template and set MODE
   useEffect(() => {
     setRoomCode(Math.random().toString(36).substring(2, 6).toUpperCase());
+    
     if (location.state?.template) {
         const t = location.state.template;
         const templateBg = t.bgColor || '#111827';
         const templateText = t.textColor || '#ffffff';
+        
         if (t.slides && Array.isArray(t.slides)) {
             const mappedSlides = t.slides.map((s, i) => ({
                 ...BLANK_SLIDE, 
@@ -348,17 +350,23 @@ const SurveyCreator = () => {
                 question: s.question,
                 type: s.type,
                 options: s.options || [],
+                correctAnswer: s.correctAnswer, // ✅ Keep correct answer!
                 image: null,
-                layout: 'centered',
+                layout: s.layout || 'centered',
                 bgImage: null,
-                bgColor: templateBg,
-                textColor: templateText,
-                reactions: s.reactions || BLANK_SLIDE.reactions
+                bgColor: s.bgColor || templateBg,
+                textColor: s.textColor || templateText,
+                reactions: s.reactions || BLANK_SLIDE.reactions,
+                visualization: s.visualization || 'bar',
+                showPercentage: s.showPercentage !== undefined ? s.showPercentage : true
             }));
             setSlides(mappedSlides);
-        } else {
-            setSlides([{ ...BLANK_SLIDE, question: t.question, type: t.type }]);
         }
+    }
+
+    // ✅ Set Session Mode from Previous Screen (Manual/AI Creator)
+    if (location.state?.mode) {
+        setSessionMode(location.state.mode);
     }
   }, [location.state]);
 
@@ -387,10 +395,7 @@ const SurveyCreator = () => {
                         </div>
                     ) : (
                         recentItems.map((item) => (
-                            <div key={item.id} 
-                                onClick={() => handleRestoreSession(item)}
-                                className="group flex items-center justify-between p-4 rounded-xl bg-gray-800/50 hover:bg-gray-800 border border-gray-700/50 hover:border-blue-500/50 cursor-pointer transition-all"
-                            >
+                            <div key={item.id} onClick={() => handleRestoreSession(item)} className="group flex items-center justify-between p-4 rounded-xl bg-gray-800/50 hover:bg-gray-800 border border-gray-700/50 hover:border-blue-500/50 cursor-pointer transition-all">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-1">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${item.status === 'Live' ? 'bg-green-900 text-green-300' : 'bg-yellow-900 text-yellow-300'}`}>
@@ -401,13 +406,7 @@ const SurveyCreator = () => {
                                     <h4 className="font-bold text-white group-hover:text-blue-400 transition">{item.title}</h4>
                                     <p className="text-xs text-gray-400 mt-1">{item.type} • {item.savedSlides ? item.savedSlides.length : 0} Slides</p>
                                 </div>
-                                <button 
-                                    onClick={(e) => handleDeleteHistoryItem(e, item.id)}
-                                    className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"
-                                    title="Remove from history"
-                                >
-                                    <Trash2 size={16}/>
-                                </button>
+                                <button onClick={(e) => handleDeleteHistoryItem(e, item.id)} className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={16}/></button>
                             </div>
                         ))
                     )}
@@ -434,21 +433,17 @@ const SurveyCreator = () => {
                         }
                     </div>
                 </button>
-                <button 
-                    onClick={(e) => handleDeleteSlide(e, index)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 hover:scale-110"
-                    title="Delete Slide"
-                >
+                <button onClick={(e) => handleDeleteSlide(e, index)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 hover:scale-110">
                     <X size={10} />
                 </button>
             </div>
         ))}
         
         <div className="flex flex-col gap-2 mt-2">
-            <button onClick={handleAddSlide} className="w-12 h-12 rounded-full bg-gray-800 hover:bg-blue-600 border border-gray-700 hover:border-blue-500 flex items-center justify-center transition shadow-lg group relative" title="Add Question">
+            <button onClick={handleAddSlide} className="w-12 h-12 rounded-full bg-gray-800 hover:bg-blue-600 border border-gray-700 hover:border-blue-500 flex items-center justify-center transition shadow-lg group relative">
                 <Plus size={20}/>
             </button>
-            <button onClick={handleAddEnding} className="w-12 h-12 rounded-full bg-gray-800 hover:bg-red-600 border border-gray-700 hover:border-red-500 flex items-center justify-center transition shadow-lg" title="Add Ending Screen">
+            <button onClick={handleAddEnding} className="w-12 h-12 rounded-full bg-gray-800 hover:bg-red-600 border border-gray-700 hover:border-red-500 flex items-center justify-center transition shadow-lg">
                 <Flag size={20}/>
             </button>
         </div>
@@ -459,17 +454,12 @@ const SurveyCreator = () => {
         <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900/50 backdrop-blur-md">
             <h2 className="text-gray-400 font-bold text-sm truncate max-w-md">
                 Slide {activeSlide + 1}: <span className="text-white">{currentSlide.question || "Untitled"}</span>
+                {sessionMode === 'quiz' && <span className="ml-2 px-2 py-0.5 bg-blue-600 text-[10px] rounded text-white font-bold uppercase">Quiz Mode</span>}
             </h2>
             <div className="flex gap-3">
-                <button onClick={loadHistory} className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">
-                    <History size={18}/>
-                </button>
-                <button onClick={handleSaveDraft} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-bold transition border border-gray-700">
-                    <Save size={16}/> Draft
-                </button>
-                <button onClick={handlePresent} className="flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:scale-105 text-white text-sm font-bold transition shadow-lg shadow-purple-500/20">
-                    <Play size={16} fill="currentColor"/> Present
-                </button>
+                <button onClick={loadHistory} className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition"><History size={18}/></button>
+                <button onClick={handleSaveDraft} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-bold transition border border-gray-700"><Save size={16}/> Draft</button>
+                <button onClick={handlePresent} className="flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:scale-105 text-white text-sm font-bold transition shadow-lg shadow-purple-500/20"><Play size={16} fill="currentColor"/> Present</button>
             </div>
         </div>
 
@@ -488,37 +478,25 @@ const SurveyCreator = () => {
             >
                 {/* --- CONDITIONAL RENDER START --- */}
                 {currentSlide.type === 'info' ? (
-                    // 🟢 OPTION A: INFO SLIDE (Title or Rules)
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-                        {/* TITLE LAYOUT */}
                         {currentSlide.layout === 'title' && (
                             <div className="animate-fade-in-up">
                                 <h1 className="text-6xl font-extrabold mb-6 tracking-tight">{currentSlide.question || "Topic Title"}</h1>
-                                <p className="text-2xl opacity-80 font-light max-w-3xl leading-relaxed">
-                                    {currentSlide.options[0] || "Subtitle goes here"}
-                                </p>
+                                <p className="text-2xl opacity-80 font-light max-w-3xl leading-relaxed">{currentSlide.options[0] || "Subtitle goes here"}</p>
                             </div>
                         )}
-
-                        {/* BULLETS LAYOUT */}
                         {currentSlide.layout === 'bullets' && (
                             <div className="w-full max-w-4xl text-left animate-fade-in-up bg-white text-black p-10 rounded-3xl shadow-xl">
-                                <h1 className="text-5xl font-bold mb-8 text-center border-b-2 border-gray-200 pb-4">
-                                    {currentSlide.question || "Rules"}
-                                </h1>
+                                <h1 className="text-5xl font-bold mb-8 text-center border-b-2 border-gray-200 pb-4">{currentSlide.question || "Rules"}</h1>
                                 <ul className="space-y-4">
                                     {currentSlide.options.map((opt, i) => (
-                                        <li key={i} className="flex items-start gap-3 text-xl font-medium">
-                                            <span className="mt-1.5 w-2 h-2 bg-black rounded-full shrink-0"></span>
-                                            <span>{opt}</span>
-                                        </li>
+                                        <li key={i} className="flex items-start gap-3 text-xl font-medium"><span className="mt-1.5 w-2 h-2 bg-black rounded-full shrink-0"></span><span>{opt}</span></li>
                                     ))}
                                 </ul>
                             </div>
                         )}
                     </div>
                 ) : (
-                    // 🔵 OPTION B: STANDARD SLIDE (MCQ, Pin, etc.)
                     <>
                         {/* 1. Join Info Bar */}
                         {currentSlide.type !== 'ending' && (
@@ -540,76 +518,58 @@ const SurveyCreator = () => {
                             
                             {currentSlide.type === 'ending' ? (
                                 <div className="flex-1 flex flex-col items-center justify-center animate-fade-in-up">
-                                    <div className="mb-6 p-6 rounded-full bg-white/10 backdrop-blur-md shadow-xl border border-white/20">
-                                        <CheckCircle size={64} className="opacity-90"/>
-                                    </div>
+                                    <div className="mb-6 p-6 rounded-full bg-white/10 backdrop-blur-md shadow-xl border border-white/20"><CheckCircle size={64} className="opacity-90"/></div>
                                     <h1 className="text-6xl font-extrabold mb-4 tracking-tight">{currentSlide.question || "Thank You!"}</h1>
-                                    <p className="text-xl opacity-70 mb-12 max-w-lg leading-relaxed font-medium">
-                                        {currentSlide.options[0] || "The survey has ended."}
-                                    </p>
-                                    <button 
-                                        onClick={handleSimulatedExit}
-                                        className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-full shadow-lg flex items-center gap-2 transition transform hover:scale-105 active:scale-95"
-                                    >
-                                        <LogOut size={20}/> Exit Survey
-                                    </button>
+                                    <p className="text-xl opacity-70 mb-12 max-w-lg leading-relaxed font-medium">{currentSlide.options[0] || "The survey has ended."}</p>
                                 </div>
                             ) : (
                                 <>
                                     <div className={`flex flex-col justify-center ${currentSlide.layout === 'split' ? 'w-1/2' : 'w-full mb-8'}`}>
-                                        <h1 className={`font-extrabold leading-tight break-words ${
-                                            currentSlide.layout === 'centered' ? 'text-5xl' : 'text-4xl'
-                                        }`}>
-                                            {currentSlide.question || "Start typing..."}
-                                        </h1>
+                                        <h1 className={`font-extrabold leading-tight break-words ${currentSlide.layout === 'centered' ? 'text-5xl' : 'text-4xl'}`}>{currentSlide.question || "Start typing..."}</h1>
                                     </div>
 
                                     <div className={`flex flex-1 items-center justify-center gap-8 ${
                                         currentSlide.layout === 'split' ? 'w-1/2 flex-col' : 
                                         currentSlide.layout === 'left' ? 'flex-col-reverse' : 'flex-row'
                                     }`}>
-                                        <div className={`bg-white p-3 rounded-xl shadow-lg shrink-0 ${currentSlide.layout === 'centered' ? 'w-40 h-40' : 'w-32 h-32'}`}>
-                                            <QRCodeCanvas value={`${HOST_URL}/game/${roomCode}`} size={currentSlide.layout === 'centered' ? 145 : 115} />
-                                        </div>
-                                        <div className={`flex-1 h-full w-full bg-black/5 rounded-2xl border-2 border-dashed border-current/20 flex flex-col items-center justify-center p-6 opacity-80 ${currentSlide.layout === 'split' ? 'h-64' : ''}`}>
-                                            
-                                            {/* VISUALIZATION RENDERING LOGIC */}
-                                            {currentSlide.type === 'mcq' ? (
-                                                <RenderMockChart 
-                                                    type={currentSlide.visualization || 'bar'} 
-                                                    options={currentSlide.options}
-                                                    showPercentage={currentSlide.showPercentage}
-                                                    textColor={currentSlide.textColor}
-                                                />
-                                            ) : currentSlide.type === 'pin' && currentSlide.image ? (
-                                                <img src={currentSlide.image} className="h-full object-contain rounded-lg shadow-md" alt="Preview"/>
-                                            ) : (
-                                                <div className="flex flex-col items-center">
-                                                    <div className="mb-4 opacity-70 p-4 bg-white/20 rounded-full backdrop-blur-md">
-                                                        {SURVEY_TYPES.find(t=>t.id === currentSlide.type)?.icon}
+                                            <div className={`bg-white p-3 rounded-xl shadow-lg shrink-0 flex flex-col items-center ${currentSlide.layout === 'centered' ? 'w-40' : 'w-32'}`}>
+                                                <QRCodeCanvas value={`${HOST_URL}/game/${roomCode}`} size={currentSlide.layout === 'centered' ? 145 : 115} />
+                                                {/* ✅ VISUAL FIX: SHOW CODE UNDER QR */}
+                                                <p className="text-black font-mono font-bold text-lg mt-2 tracking-widest">{roomCode}</p>
+                                            </div>
+                                            <div className={`flex-1 h-full w-full bg-black/5 rounded-2xl border-2 border-dashed border-current/20 flex flex-col items-center justify-center p-6 opacity-80 ${currentSlide.layout === 'split' ? 'h-64' : ''}`}>
+                                                {currentSlide.type === 'mcq' ? (
+                                                    <RenderMockChart 
+                                                        type={currentSlide.visualization || 'bar'} 
+                                                        options={currentSlide.options}
+                                                        showPercentage={currentSlide.showPercentage}
+                                                        textColor={currentSlide.textColor}
+                                                    />
+                                                ) : currentSlide.type === 'pin' && currentSlide.image ? (
+                                                    <img src={currentSlide.image} className="h-full object-contain rounded-lg shadow-md" alt="Preview"/>
+                                                ) : (
+                                                    <div className="flex flex-col items-center">
+                                                        <div className="mb-4 opacity-70 p-4 bg-white/20 rounded-full backdrop-blur-md">
+                                                            {SURVEY_TYPES.find(t=>t.id === currentSlide.type)?.icon}
+                                                        </div>
+                                                        <p className="text-sm font-bold uppercase tracking-widest opacity-70">
+                                                            {SURVEY_TYPES.find(t=>t.id === currentSlide.type)?.label} Mode
+                                                        </p>
                                                     </div>
-                                                    <p className="text-sm font-bold uppercase tracking-widest opacity-70">
-                                                        {SURVEY_TYPES.find(t=>t.id === currentSlide.type)?.label} Mode
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </div>
+                                                )}
+                                            </div>
                                     </div>
                                 </>
                             )}
                         </div>
                     </>
                 )}
-                {/* --- CONDITIONAL RENDER END --- */}
                 
-                {/* --- STUDENT REACTION PREVIEW --- */}
-                {/* Shows the presenter what reaction buttons students will see */}
+                {/* STUDENT REACTION PREVIEW */}
                 <div className="absolute bottom-4 right-4 bg-black/40 backdrop-blur-md p-2 rounded-full flex gap-2 border border-white/10 z-20">
                     <span className="text-[10px] text-gray-300 font-bold uppercase self-center px-2">Student View</span>
                     {AVAILABLE_REACTIONS.map(r => (
-                        <div key={r.id} className={`p-1.5 rounded-full transition-all ${
-                            (currentSlide.reactions || []).includes(r.id) ? 'bg-white/20 text-white opacity-100' : 'bg-transparent text-gray-500 opacity-20'
-                        }`}>
+                        <div key={r.id} className={`p-1.5 rounded-full transition-all ${(currentSlide.reactions || []).includes(r.id) ? 'bg-white/20 text-white opacity-100' : 'bg-transparent text-gray-500 opacity-20'}`}>
                             {React.cloneElement(r.icon, { size: 14 })}
                         </div>
                     ))}
@@ -652,7 +612,7 @@ const SurveyCreator = () => {
                     />
                 </div>
 
-                {/* --- NEW: INFO SLIDE EDITOR --- */}
+                {/* INFO SLIDE EDITOR */}
                 {currentSlide.type === 'info' && (
                     <div className="space-y-4 animate-fade-in p-4 bg-gray-800/30 rounded-xl border border-gray-700/50">
                         <div className="flex gap-2 bg-gray-800 p-1 rounded-lg">
@@ -675,7 +635,6 @@ const SurveyCreator = () => {
                                         }}
                                         className="flex-1 bg-gray-800 p-2 rounded-lg border border-gray-700 text-sm text-white focus:border-blue-500 outline-none"
                                     />
-                                    {/* Only allow deleting if it's a bullet list */}
                                     {currentSlide.layout === 'bullets' && (
                                         <button onClick={() => {
                                             const newOpts = currentSlide.options.filter((_, idx) => idx !== i);
@@ -691,32 +650,24 @@ const SurveyCreator = () => {
                     </div>
                 )}
 
-                {/* --- REACTIONS SELECTOR --- */}
-                {/* Shown for ALL types (MCQ, WordCloud, etc.) */}
+                {/* REACTIONS SELECTOR */}
                 <div className="space-y-3 animate-fade-in p-4 bg-gray-800/30 rounded-xl border border-gray-700/50">
-                     <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                         Reactions <HelpCircle size={12}/>
-                     </label>
-                     <div className="flex justify-between gap-1">
-                         {AVAILABLE_REACTIONS.map(reaction => {
-                             const isActive = (currentSlide.reactions || []).includes(reaction.id);
-                             return (
-                                 <button 
-                                     key={reaction.id}
-                                     onClick={() => toggleReaction(reaction.id)}
-                                     className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center ${
-                                         isActive 
-                                         ? 'bg-purple-600/20 border-purple-500 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.2)]' 
-                                         : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300'
-                                     }`}
-                                     title={reaction.label}
-                                 >
-                                     {reaction.icon}
-                                 </button>
-                             )
-                         })}
-                     </div>
-                     <p className="text-[10px] text-gray-500 text-center mt-1">Select which reactions students can send.</p>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">Reactions <HelpCircle size={12}/></label>
+                      <div className="flex justify-between gap-1">
+                          {AVAILABLE_REACTIONS.map(reaction => {
+                              const isActive = (currentSlide.reactions || []).includes(reaction.id);
+                              return (
+                                  <button 
+                                      key={reaction.id}
+                                      onClick={() => toggleReaction(reaction.id)}
+                                      className={`p-3 rounded-lg border transition-all duration-200 flex items-center justify-center ${isActive ? 'bg-purple-600/20 border-purple-500 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300'}`}
+                                      title={reaction.label}
+                                  >
+                                      {reaction.icon}
+                                  </button>
+                              )
+                          })}
+                      </div>
                 </div>
 
                 {currentSlide.type === 'ending' && (
@@ -724,23 +675,17 @@ const SurveyCreator = () => {
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2"><MessageSquare size={14}/> Sub-text</label>
                         <input 
                             value={currentSlide.options[0] || ""} 
-                            onChange={(e) => {
-                                const newOpts = [...currentSlide.options];
-                                newOpts[0] = e.target.value;
-                                updateSlide('options', newOpts);
-                            }}
+                            onChange={(e) => { const newOpts = [...currentSlide.options]; newOpts[0] = e.target.value; updateSlide('options', newOpts); }}
                             className="w-full bg-gray-800 text-white p-3 rounded-xl border border-gray-700 focus:border-blue-500 outline-none text-sm"
                             placeholder="Optional message"
                         />
                     </div>
                 )}
 
-                {/* VISUALIZATION SETTINGS (Only for MCQ) */}
+                {/* VISUALIZATION SETTINGS (MCQ) */}
                 {currentSlide.type === 'mcq' && (
                     <div className="space-y-4 animate-fade-in p-4 bg-gray-800/50 rounded-xl border border-gray-700/50">
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                            Visualization type
-                        </label>
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">Visualization type</label>
                         <div className="flex gap-2">
                             {VISUALIZATION_OPTS.map(v => (
                                 <button
