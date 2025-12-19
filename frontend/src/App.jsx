@@ -1,46 +1,122 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import TeacherHub from './components/TeacherHub';
-import TeacherAI from './components/TeacherAI';
-// Import Components
-import AIQuizGenerator from './components/AIQuizGenerator';
-import ManualQuiz from './components/ManualQuiz';
+import { Toaster } from 'react-hot-toast'; // ✅ 1. Import Toaster
+// --- CONTEXT & AUTH ---
+import { AuthProvider } from './context/AuthContext'; 
+import ProtectedRoute from './components/ProtectedRoute'; 
+
+// --- PUBLIC COMPONENTS ---
 import Navbar from './components/Navbar';
-import Lobby from './components/Lobby';
-import GameRoom from './components/GameRoom';
+import Login from './components/Login';
+import Lobby from './components/Lobby'; // Home / Join Screen
+import GameRoom from './components/GameRoom'; // The actual game (Students need access)
+import Register from './components/Register'; // ✅ 1. Import Register
+// --- SOLO / STUDY MODES (Public) ---
 import SoloHub from './components/SoloHub';
 import NotesQuiz from './components/NotesQuiz';
 import FlashcardMode from './components/FlashcardMode';
 import MathBash from './components/games/MathBash';
 import WordScramble from './components/games/WordScramble';
+import ReportView from './components/ReportView'; // ✅ Import this
+// --- TEACHER COMPONENTS (Protected) ---
+import TeacherHub from './components/TeacherHub';
+import AIQuizGenerator from './components/AIQuizGenerator';
+import QuizCreator from './components/QuizCreator';
 import SurveyCreator from './components/SurveyCreator';
+
 function App() {
   return (
-    <BrowserRouter>
-      {/* Navbar appears on every page */}
-      <Navbar /> 
-      
-      <Routes>
-        {/* Live Multiplayer Routes */}
-        <Route path="/" element={<Lobby />} />
-        
-<Route path="/teacher/ai" element={<AIQuizGenerator />} />
-        <Route path="/game/:roomId" element={<GameRoom />} />
-        <Route path="/teacher" element={<TeacherHub />} />
-<Route path="/teacher/ai" element={<TeacherAI />} />
-        {/* Solo / Study Routes */}
-        <Route path="/solo" element={<SoloHub />} />
-        <Route path="/upload-notes" element={<NotesQuiz />} />
-        <Route path="/study" element={<FlashcardMode />} />
-        <Route path="/create-manual" element={<ManualQuiz />} />
-        <Route path="/game/math-bash" element={<MathBash />} />
-        <Route path="/game/word-scramble" element={<WordScramble />} />
-        <Route path="/create-survey" element={<SurveyCreator />} />
+    <AuthProvider> {/* ✅ 1. Wrap entire app in AuthProvider */}
+      <BrowserRouter>
+        {/* ✅ 2. Add Toaster here. 
+            'position' sets where it appears. 
+            'toastOptions' styles it to match your Dark Mode. 
+        */}
+        <Toaster 
+          position="top-center" 
+          toastOptions={{
+            style: {
+              background: '#1f2937', // gray-900
+              color: '#fff',
+              border: '1px solid #374151',
+            },
+            success: {
+              iconTheme: { primary: '#10B981', secondary: 'white' },
+            },
+            error: {
+              iconTheme: { primary: '#EF4444', secondary: 'white' },
+            },
+          }}
+        />
 
-      </Routes>
-    </BrowserRouter>
+        <Navbar /> 
+        
+        <Routes>
+          {/* ==============================
+              🔓 PUBLIC ROUTES (No Login) 
+             ============================== */}
+          <Route path="/" element={<Lobby />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/game/:roomId" element={<GameRoom />} />
+          <Route path="/register" element={<Register />} /> {/* ✅ 2. Add Route */}
+          {/* Solo Learning & Mini-Games */}
+          <Route path="/solo" element={<SoloHub />} />
+          <Route path="/upload-notes" element={<NotesQuiz />} />
+          <Route path="/study" element={<FlashcardMode />} />
+          <Route path="/game/math-bash" element={<MathBash />} />
+          <Route path="/game/word-scramble" element={<WordScramble />} />
+
+          {/* ==============================
+              🔒 PROTECTED ROUTES (Teacher Only) 
+             ============================== */}
+          <Route 
+            path="/teacher" 
+            element={
+              <ProtectedRoute>
+                <TeacherHub />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/teacher/ai" 
+            element={
+              <ProtectedRoute>
+                <AIQuizGenerator />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/create-quiz" 
+            element={
+              <ProtectedRoute>
+                <QuizCreator />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/create-survey" 
+            element={
+              <ProtectedRoute>
+                <SurveyCreator />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/report/:id" 
+            element={
+              <ProtectedRoute>
+                <ReportView />
+              </ProtectedRoute>
+            } 
+          />
+
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
-// ⬇️ THIS LINE WAS MISSING OR BROKEN
 export default App;
