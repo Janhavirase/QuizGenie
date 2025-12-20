@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # 🍃 Service 1: MongoDB
+  mongo:
+    image: mongo:latest
+    container_name: quizgenie_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  # 🔴 Service 2: Redis (ADD THIS)
+  redis:
+    image: redis:alpine
+    container_name: quizgenie_redis
+    ports:
+      - "6379:6379"
+
+  # ⚙️ Service 3: Backend API
+  api:
+    build: ./backend
+    container_name: quizgenie_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/quizgenie
+      - PORT=5000
+      - JWT_SECRET=test_docker_secret_123
+      # 👇 TELL BACKEND WHERE REDIS IS
+      - REDIS_HOST=redis 
+      - REDIS_PORT=6379
+    depends_on:
+      - mongo
+      - redis # Wait for Redis to start
+
+  # 💻 Service 4: Frontend UI
+  client:
+    build: ./frontend
+    container_name: quizgenie_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:

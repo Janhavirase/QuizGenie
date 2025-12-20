@@ -1,0 +1,46 @@
+name: QuizGenie CI Pipeline
+
+# 1. Trigger: When do we run this?
+# Run on every push to main or any pull request
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # 2. Define the Job: "Test Backend"
+  test-backend:
+    runs-on: ubuntu-latest
+
+    # Define the environment variables the tests need
+    env:
+      JWT_SECRET: "test_secret_for_ci_pipeline"
+      MONGO_URI: "mongodb://localhost:27017/testdb" 
+      # Note: We don't need a real Mongo URI because we use In-Memory DB in tests!
+
+    steps:
+    # A. Check out your code from the repository
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # B. Install Node.js (The engine)
+    - name: Setup Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    # C. Install Dependencies (Fast)
+    - name: Install Backend Dependencies
+      run: |
+        cd backend
+        npm ci 
+      # 'npm ci' is faster and stricter than 'npm install' for CI environments
+
+    # D. Run the Tests (The Moment of Truth)
+    - name: Run Integration Tests
+      run: |
+        cd backend
+        npm test

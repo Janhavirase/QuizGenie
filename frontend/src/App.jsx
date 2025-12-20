@@ -13,8 +13,9 @@ import GameRoom from './components/GameRoom'; // The actual game (Students need 
 import Register from './components/Register'; // ✅ 1. Import Register
 // --- SOLO / STUDY MODES (Public) ---
 import SoloHub from './components/SoloHub';
+import CreateManual from './components/CreateManual';
 import NotesQuiz from './components/NotesQuiz';
-import FlashcardMode from './components/FlashcardMode';
+import FlashcardMode from './components/Study';
 import MathBash from './components/games/MathBash';
 import WordScramble from './components/games/WordScramble';
 import ReportView from './components/ReportView'; // ✅ Import this
@@ -23,7 +24,8 @@ import TeacherHub from './components/TeacherHub';
 import AIQuizGenerator from './components/AIQuizGenerator';
 import QuizCreator from './components/QuizCreator';
 import SurveyCreator from './components/SurveyCreator';
-
+// Import
+import Profile from './components/Profile';
 function App() {
   return (
     <AuthProvider> {/* ✅ 1. Wrap entire app in AuthProvider */}
@@ -65,7 +67,8 @@ function App() {
           <Route path="/study" element={<FlashcardMode />} />
           <Route path="/game/math-bash" element={<MathBash />} />
           <Route path="/game/word-scramble" element={<WordScramble />} />
-
+          <Route path="/create-manual" element={<CreateManual />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           {/* ==============================
               🔒 PROTECTED ROUTES (Teacher Only) 
              ============================== */}

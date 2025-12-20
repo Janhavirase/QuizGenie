@@ -4,7 +4,17 @@ const axios = require('axios');
 const multer = require('multer');
 
 const upload = multer(); // Memory storage
+const { aiGenerateSchema } = require('../validation'); 
 
+// Define the validation helper function directly here
+// (Or import it if you made it a shared utility)
+const validate = (schema) => (req, res, next) => {
+    const { error } = schema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+    }
+    next();
+};
 // --- HELPER: RETRY LOGIC ---
 const fetchWithRetry = async (url, data, retries = 3, delay = 5000) => {
     for (let i = 0; i < retries; i++) {
@@ -98,7 +108,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 // -------------------------------------------
 // 2. AI GENERATE ROUTE (FROM TOPIC)
 // -------------------------------------------
-router.post('/generate', async (req, res) => {
+router.post('/generate', validate(aiGenerateSchema),async (req, res) => {
     const { topic, difficulty = "Medium", amount = 5, type = "MCQ" } = req.body;
 
     try {

@@ -13,10 +13,8 @@ const Login = () => {
   const location = useLocation();
 
   const from = location.state?.from?.pathname || '/teacher';
-
-  const handleLogin = async (e) => {
+const handleLogin = async (e) => {
     e.preventDefault();
-  // 2. Add Loading Toast
     const toastId = toast.loading('Logging in...');
 
     try {
@@ -32,28 +30,37 @@ const Login = () => {
         throw new Error(data.message || 'Login failed');
       }
 
-      login(data.user);
+      // ✅ SUCCESS PATH (Backend is working)
+      // We accept data.user OR data (depending on backend structure)
+      const userToSave = data.user || data; 
+      
+      login(userToSave);
+      toast.success(`Welcome back, ${userToSave.name}!`, { id: toastId });
       navigate(from, { replace: true });
-// 3. Success Toast
-      toast.success(`Welcome back, ${data.user.name}!`, { id: toastId });
-      login(data.user);
-      navigate(from, { replace: true });
+
     } catch (err) {
-        console.warn("Backend failed...");
-      // Fallback
+      console.warn("Backend failed... switching to Demo Mode check.");
+      
+      // ✅ FALLBACK PATH (Backend is down)
       const existingUsers = JSON.parse(localStorage.getItem('quizgenie_users_db') || "[]");
       const user = existingUsers.find(u => u.email === email && u.password === password);
 
       if (user) {
         toast.success("Login Successful (Demo Mode)", { id: toastId });
-          login({ name: user.name, email: user.email }); 
-          navigate(from, { replace: true });
+        
+        // ⚠️ CRITICAL FIX: We create a fake ID so the Profile page doesn't crash
+        login({ 
+            name: user.name, 
+            email: user.email, 
+            id: user.id || "demo-user-id" // This prevents "undefined" errors
+        }); 
+        
+        navigate(from, { replace: true });
       } else {
-          toast.error(err.message || "Invalid credentials", { id: toastId });
+        toast.error(err.message || "Invalid credentials", { id: toastId });
       }
     }
   };
-
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
       <div className="w-full max-w-md bg-gray-900 border border-gray-800 p-8 rounded-3xl shadow-2xl relative overflow-hidden">

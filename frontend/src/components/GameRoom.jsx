@@ -25,7 +25,7 @@ const GameRoom = () => {
   };
 
   const isTeacher = location.state?.role === 'host';
-  const role = location.state?.role; // ✅ Defined role here for the Ref
+  const role = location.state?.role; 
   const name = location.state?.name || 'Guest';
   
   // ✅ READ MODE FROM URL
@@ -45,9 +45,9 @@ const GameRoom = () => {
   const [timeLeft, setTimeLeft] = useState(null);
   const [isRevealing, setIsRevealing] = useState(false);
 
-  // ✅ REF TO STORE LATEST DATA (Fixes "role is not defined" & Empty Data)
-  // Added 'players' here to ensure the socket listener sees the latest list
-  const gameDataRef = useRef({ role, topic: "", hostHistory: [], players: [] });
+  // ✅ REF TO STORE LATEST DATA (Fixes Timer Reset & Stale State)
+  // Added 'stats' here so the timer can read it without resetting
+  const gameDataRef = useRef({ role, topic: "", hostHistory: [], players: [], stats: {} });
 
   // ✅ Keep Ref Synced
   useEffect(() => {
@@ -55,9 +55,10 @@ const GameRoom = () => {
           role, 
           topic: topic || "Untitled Session", 
           hostHistory,
-          players // <--- KEY FIX: Sync players state to Ref
+          players,
+          stats // <--- Sync stats to Ref
       };
-  }, [role, topic, hostHistory, players]);
+  }, [role, topic, hostHistory, players, stats]);
 
   // --- THEME HELPER ---
   const getThemeStyle = () => {
@@ -73,11 +74,8 @@ const GameRoom = () => {
 
   // ✅ NEW LOGIC: SAVE REPORT
   const saveGameReport = (incomingLeaderboard) => {
-    // Get latest data from Ref (safe from stale closures)
     const { topic, hostHistory, players } = gameDataRef.current;
 
-    // KEY FIX: Use the incoming data, OR fallback to the Ref's player list
-    // This ensures we never save an empty list if the state is there
     const leaderboard = (incomingLeaderboard && incomingLeaderboard.length > 0) 
         ? incomingLeaderboard 
         : players;
@@ -86,18 +84,14 @@ const GameRoom = () => {
         console.warn("⚠️ Warning: Saving report with 0 players.");
     }
 
-    // 1. Calculate Statistics
     const totalPlayers = leaderboard.length;
     const avgScore = totalPlayers > 0 
         ? Math.round(leaderboard.reduce((acc, p) => acc + p.score, 0) / totalPlayers) 
         : 0;
 
-    // 2. Generate Question Stats from hostHistory
     const questionStats = hostHistory.map((h, i) => {
-        // Calculate correct/wrong based on the stats stored during the game
         const totalVotes = Object.values(h.stats || {}).reduce((a, b) => a + Number(b), 0);
         const correctCount = h.stats && h.correctAnswer ? (Number(h.stats[h.correctAnswer]) || 0) : 0;
-        
         return {
             name: `Q${i+1}`,
             correct: correctCount,
@@ -105,10 +99,8 @@ const GameRoom = () => {
         };
     });
     
-    // Find toughest question
     const toughest = questionStats.reduce((min, q) => q.correct < min.correct ? q : min, questionStats[0]);
 
-    // 3. Create Report Object
     const newReport = {
         quizId: activeRoomId,
         title: topic,
@@ -120,7 +112,6 @@ const GameRoom = () => {
         questionStats
     };
 
-    // 4. Save to Storage
     const allReports = JSON.parse(localStorage.getItem('quizgenie_reports') || "[]");
     const filtered = allReports.filter(r => r.quizId !== activeRoomId);
     filtered.push(newReport);
@@ -129,8 +120,29 @@ const GameRoom = () => {
     console.log("✅ Game Report Saved Successfully!", newReport);
   };
 
-  // --- 1. SOCKET LISTENERS ---
+  // --- SOCKET LISTENERS ---
+
+  // 1. AUTO-RECONNECT ON REFRESH
   useEffect(() => {
+      const savedSession = localStorage.getItem("quiz_session");
+      if (savedSession && !isTeacher) {
+          const { roomCode, savedName } = JSON.parse(savedSession);
+          if (roomCode === activeRoomId && !name && savedName) {
+              socket.emit("join_room", { roomCode: activeRoomId, playerName: savedName });
+          }
+      }
+  }, []);
+
+  // 2. MAIN LISTENERS & JOIN LOGIC
+  useEffect(() => {
+    // Save Session logic
+    if (!isTeacher && name !== 'Guest') {
+        localStorage.setItem("quiz_session", JSON.stringify({
+            roomCode: activeRoomId,
+            savedName: name
+        }));
+    }
+
     socket.emit("join_room", { roomCode: activeRoomId, playerName: isTeacher ? "___HOST___" : name });
 
     socket.on("update_players", (list) => setPlayers(list.filter(p => p.name !== "___HOST___").sort((a,b) => b.score - a.score)));
@@ -148,15 +160,11 @@ const GameRoom = () => {
 
     socket.on("update_stats", (newStats) => setStats(newStats));
     
-    // ✅ FIXED GAME OVER LISTENER
     socket.on("game_over", (finalLeaderboard) => {
         setGameStatus("finished");
         stopSound("tick");
         playSound("win");
-
-        // Use Ref to check role (No more ReferenceError)
         if (gameDataRef.current.role === 'host') {
-            // Pass whatever the server sent, or null to force using the Ref
             saveGameReport(finalLeaderboard);
         }
     });
@@ -176,17 +184,22 @@ const GameRoom = () => {
     };
   }, [activeRoomId]);
 
-  // --- 2. TIMER & LOGIC ---
+  // --- 2. TIMER & LOGIC (FIXED) ---
   useEffect(() => {
+      // Safety Checks
       if (!currentQuestion || gameStatus !== 'playing' || isRevealing || currentQuestion.type === 'info' || currentQuestion.type === 'ending') {
           if (!isRevealing) setTimeLeft(null);
           return;
       }
 
-      // ✅ Force Timer for Quiz Mode
-      if (isQuizMode) {
-          const startLimit = currentQuestion.timeLimit || (currentQuestion.type === 'open' ? 30 : 15);
-          setTimeLeft(startLimit);
+      // ✅ LOGIC FIX: Check if question has a timer (Works for Student manual join too)
+      const hasTimer = (currentQuestion.timeLimit && currentQuestion.timeLimit > 0);
+
+      if (hasTimer) {
+          const startLimit = currentQuestion.timeLimit;
+          
+          // Only set time if it is null (prevents restart on re-renders)
+          setTimeLeft(prev => prev === null ? startLimit : prev);
 
           const timer = setInterval(() => {
               setTimeLeft((prev) => {
@@ -194,13 +207,20 @@ const GameRoom = () => {
                       clearInterval(timer);
                       setIsRevealing(true); 
                       
-                      if (isTeacher) {
-                          // Save Stats
+                      // TEACHER LOGIC: SAVE STATS (Using Ref to avoid dependency loop)
+                      if (gameDataRef.current.role === 'host') {
+                          const currentStats = gameDataRef.current.stats; // ✅ Read from Ref
+
                           setHostHistory(prevH => {
                               if (prevH.some(h => h.question === currentQuestion.questionText)) return prevH;
-                              return [...prevH, { question: currentQuestion.questionText, correctAnswer: currentQuestion.correctAnswer, stats: stats }];
+                              return [...prevH, { 
+                                  question: currentQuestion.questionText, 
+                                  correctAnswer: currentQuestion.correctAnswer, 
+                                  stats: currentStats 
+                              }];
                           });
-                          // Wait 5s then Next
+                          
+                          // Wait 5s then Next Slide
                           setTimeout(() => socket.emit("next_question", { roomId: activeRoomId }), 5000);
                       }
                       return 0;
@@ -212,7 +232,9 @@ const GameRoom = () => {
       } else {
           setTimeLeft(null);
       }
-  }, [currentQuestion, gameStatus, isTeacher, isQuizMode, isRevealing, stats]);
+      
+      // ❌ Removed 'stats' from dependency array to prevent timer reset
+  }, [currentQuestion, gameStatus, isRevealing]); 
 
   // --- ACTIONS ---
   const handleNext = () => socket.emit("next_question", { roomId: activeRoomId });
@@ -238,11 +260,10 @@ const GameRoom = () => {
   const HOST_URL = window.location.protocol + "//" + window.location.host; 
 
   // ==========================================
-  // 🎨 RENDERERS (UPDATED)
+  // 🎨 RENDERERS
   // ==========================================
 
   const renderInfoSlide = () => {
-      // 1. ENDING SCREEN
       if (currentQuestion.type === 'ending') {
           return (
               <div className="text-center p-12 animate-fade-in-up">
@@ -260,7 +281,6 @@ const GameRoom = () => {
           );
       }
 
-      // 2. INFO / TITLE SLIDES
       const layout = currentQuestion.layout || 'centered';
       
       return (
@@ -298,7 +318,6 @@ const GameRoom = () => {
       const totalVotes = Object.values(stats).reduce((a, b) => a + (Number(b) || 0), 0);
       const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
-      // --- BAR CHART ---
       if (vizType === 'bar') {
           return (
               <div className="w-full space-y-4 mt-6">
@@ -307,8 +326,6 @@ const GameRoom = () => {
                       const pct = totalVotes === 0 ? 0 : Math.round((count/totalVotes)*100);
                       const isCorrect = isRevealing && opt === currentQuestion.correctAnswer;
                       const isWrong = isRevealing && !isCorrect;
-                      
-                      // Highlight Logic
                       const barColor = isCorrect ? '#10B981' : isWrong ? '#374151' : '#3B82F6';
                       const textColor = isWrong ? 'text-gray-500' : 'text-white';
                       
@@ -329,7 +346,6 @@ const GameRoom = () => {
           );
       }
       
-      // --- PIE / DONUT ---
       if (vizType === 'pie' || vizType === 'donut') {
           let currentAngle = 0;
           const gradients = currentQuestion.options.map((opt, i) => {
@@ -363,7 +379,6 @@ const GameRoom = () => {
                       )}
                   </div>
                   
-                  {/* Legend Grid */}
                   <div className="grid grid-cols-2 gap-3 mt-8 w-full">
                       {currentQuestion.options.map((opt, i) => {
                           const count = Number(stats[opt]) || 0;
@@ -384,7 +399,6 @@ const GameRoom = () => {
           );
       }
 
-      // --- DOTS (PEOPLE ARRAY) ---
       if (vizType === 'dots') {
           return (
               <div className="w-full space-y-6 mt-6">
@@ -399,14 +413,7 @@ const GameRoom = () => {
                               </div>
                               <div className="flex flex-wrap gap-2">
                                   {Array.from({ length: count }).map((_, idx) => (
-                                      <div 
-                                          key={idx} 
-                                          className="w-5 h-5 rounded-full animate-bounce-in shadow-lg" 
-                                          style={{ 
-                                              backgroundColor: isCorrect ? '#10B981' : colors[i % colors.length], 
-                                              animationDelay: `${idx * 50}ms` 
-                                          }}
-                                      ></div>
+                                      <div key={idx} className="w-5 h-5 rounded-full animate-bounce-in shadow-lg" style={{ backgroundColor: isCorrect ? '#10B981' : colors[i % colors.length], animationDelay: `${idx * 50}ms` }}></div>
                                   ))}
                                   {count === 0 && <span className="text-xs text-gray-600 italic">No votes yet</span>}
                               </div>
@@ -416,7 +423,6 @@ const GameRoom = () => {
               </div>
           );
       }
-
       return null;
   };
 
@@ -435,8 +441,6 @@ const GameRoom = () => {
         <>
             {/* --- TEACHER SIDEBAR --- */}
             <div className="w-80 bg-gray-900 border-r border-gray-800 flex flex-col items-center p-6 shadow-2xl z-20">
-                
-                {/* ROOM CODE - HIGH VISIBILITY */}
                 <div className="w-full bg-blue-600 rounded-2xl p-4 text-center shadow-[0_0_20px_rgba(37,99,235,0.3)] mb-6 transform hover:scale-105 transition cursor-default">
                     <p className="text-[10px] font-bold text-blue-100 uppercase tracking-[0.2em] mb-1">Join At</p>
                     <p className="text-xl font-bold text-white mb-2">{HOST_URL}/game</p>
@@ -460,11 +464,10 @@ const GameRoom = () => {
 
                 <div className="mt-auto w-full">
                     {gameStatus === 'playing' && (
-                        /* Hide 'Next' button if Quiz Timer is running */
                         <button 
                             onClick={handleNext} 
-                            disabled={isRevealing || (isQuizMode && timeLeft !== null)} 
-                            className={`w-full py-4 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 transition flex items-center justify-center gap-2 shadow-lg ${isQuizMode && timeLeft !== null ? 'hidden' : ''}`}
+                            disabled={isRevealing || (timeLeft !== null)} 
+                            className={`w-full py-4 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 transition flex items-center justify-center gap-2 shadow-lg ${timeLeft !== null ? 'hidden' : ''}`}
                         >
                             {isRevealing ? 'Loading...' : 'Next Slide'} <ArrowRight size={20}/>
                         </button>
@@ -491,27 +494,14 @@ const GameRoom = () => {
 
                 {gameStatus === 'playing' && currentQuestion && (
                     <div className="flex-1 flex flex-col items-center justify-center w-full max-w-7xl mx-auto">
-                        
-                        {/* Question Text (Only if not ending/info) */}
                         {currentQuestion.type !== 'info' && currentQuestion.type !== 'ending' && (
                             <h2 className="text-5xl font-extrabold mb-10 text-center leading-tight drop-shadow-xl px-4">
                                 {currentQuestion.questionText}
                             </h2>
                         )}
-                        
-                        {/* Dynamic Content Container */}
-                        <div className={`w-full transition-all duration-500 ${
-                            currentQuestion.type === 'info' || currentQuestion.type === 'ending' 
-                            ? '' 
-                            : 'bg-black/30 backdrop-blur-md p-12 rounded-[3rem] border border-white/10 shadow-2xl'
-                        }`}>
-                            {(currentQuestion.type === 'info' || currentQuestion.type === 'ending') 
-                                ? renderInfoSlide() 
-                                : renderLiveChart()
-                            }
+                        <div className={`w-full transition-all duration-500 ${currentQuestion.type === 'info' || currentQuestion.type === 'ending' ? '' : 'bg-black/30 backdrop-blur-md p-12 rounded-[3rem] border border-white/10 shadow-2xl'}`}>
+                            {(currentQuestion.type === 'info' || currentQuestion.type === 'ending') ? renderInfoSlide() : renderLiveChart()}
                         </div>
-                        
-                        {/* Response Counter */}
                         {currentQuestion.type !== 'info' && currentQuestion.type !== 'ending' && (
                              <div className="mt-8 text-center">
                                  <div className="text-xl font-bold bg-black/40 px-8 py-3 rounded-full inline-flex items-center gap-2 border border-white/10">
@@ -539,18 +529,19 @@ const GameRoom = () => {
             
             {gameStatus === 'playing' && currentQuestion && (
                 <div className="w-full max-w-md pb-24">
- {/* ✅ FIXED: Removed 'isQuizMode' check so manual joiners see the timer too */}
-{timeLeft !== null && !isRevealing && (
-    <div className="w-full mb-8">
-        <div className="flex justify-between items-end mb-2 px-1">
-            <span className="text-xs font-bold uppercase opacity-60 tracking-widest">Time Left</span>
-            <span className={`font-mono font-bold text-xl ${timeLeft < 5 ? 'text-red-500 animate-ping' : ''}`}>{timeLeft}s</span>
-        </div>
-        <div className="h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
-            <div className="h-full bg-blue-500 transition-all duration-1000 ease-linear" style={{width: `${(timeLeft/(currentQuestion.timeLimit || 15))*100}%`}}></div>
-        </div>
-    </div>
-)}
+                    {/* ✅ STUDENT TIMER UI - Always shows if time is running */}
+                    {timeLeft !== null && !isRevealing && (
+                        <div className="w-full mb-8">
+                            <div className="flex justify-between items-end mb-2 px-1">
+                                <span className="text-xs font-bold uppercase opacity-60 tracking-widest">Time Left</span>
+                                <span className={`font-mono font-bold text-xl ${timeLeft < 5 ? 'text-red-500 animate-ping' : ''}`}>{timeLeft}s</span>
+                            </div>
+                            <div className="h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+                                <div className="h-full bg-blue-500 transition-all duration-1000 ease-linear" style={{width: `${(timeLeft/(currentQuestion.timeLimit || 15))*100}%`}}></div>
+                            </div>
+                        </div>
+                    )}
+
                     {currentQuestion.type === 'info' ? (
                         <div className="text-center bg-white/10 p-8 rounded-3xl border border-white/20 shadow-xl backdrop-blur-md">
                             {currentQuestion.layout === 'title' && <div className="text-5xl mb-6">✨</div>}
@@ -564,7 +555,6 @@ const GameRoom = () => {
                             <p className="opacity-80 text-lg">Look up for results.</p>
                         </div>
                     ) : isRevealing ? (
-                        // FEEDBACK SCREEN
                         <div className="text-center animate-fade-in-up">
                             {answerHistory[answerHistory.length-1]?.isCorrect ? (
                                 <div className="bg-green-500/20 border-2 border-green-500 p-10 rounded-[2rem] shadow-[0_0_30px_rgba(34,197,94,0.3)]">
@@ -581,7 +571,6 @@ const GameRoom = () => {
                             )}
                         </div>
                     ) : (
-                        // OPTIONS GRID
                         !hasAnswered ? (
                             <div className="flex flex-col gap-4">
                                 <h3 className="text-xl font-bold mb-2 text-center opacity-90">{currentQuestion.questionText}</h3>
@@ -606,7 +595,6 @@ const GameRoom = () => {
                 </div>
             )}
             
-            {/* Reaction Bar */}
             {currentQuestion?.allowedReactions && !isRevealing && currentQuestion.type !== 'ending' && (
                 <div className="fixed bottom-8 left-0 right-0 flex justify-center pointer-events-none">
                     <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-600 rounded-full px-6 py-3 flex gap-6 shadow-2xl pointer-events-auto transform hover:scale-105 transition">
