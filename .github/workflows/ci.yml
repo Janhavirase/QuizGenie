@@ -1,7 +1,5 @@
 name: QuizGenie CI Pipeline
 
-# 1. Trigger: When do we run this?
-# Run on every push to main or any pull request
 on:
   push:
     branches: [ main ]
@@ -9,22 +7,32 @@ on:
     branches: [ main ]
 
 jobs:
-  # 2. Define the Job: "Test Backend"
   test-backend:
     runs-on: ubuntu-latest
 
-    # Define the environment variables the tests need
+    # 👇 THIS IS THE NEW PART
+    # We ask GitHub to spin up temporary databases for the test
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+
     env:
       JWT_SECRET: "test_secret_for_ci_pipeline"
-      MONGO_URI: "mongodb://localhost:27017/testdb" 
-      # Note: We don't need a real Mongo URI because we use In-Memory DB in tests!
+      # GitHub maps the service ports to localhost, so these will work now!
+      MONGO_URI: "mongodb://localhost:27017/testdb"
+      REDIS_HOST: "localhost"
+      REDIS_PORT: 6379
 
     steps:
-    # A. Check out your code from the repository
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # B. Install Node.js (The engine)
     - name: Setup Node.js 20
       uses: actions/setup-node@v4
       with:
@@ -32,15 +40,13 @@ jobs:
         cache: 'npm'
         cache-dependency-path: backend/package-lock.json
 
-    # C. Install Dependencies (Fast)
     - name: Install Backend Dependencies
       run: |
         cd backend
-        npm ci 
-      # 'npm ci' is faster and stricter than 'npm install' for CI environments
+        npm ci
 
-    # D. Run the Tests (The Moment of Truth)
     - name: Run Integration Tests
+      # We increase timeout just in case the CI runner is slow
       run: |
         cd backend
-        npm test
+        npm test -- --testTimeout=10000
