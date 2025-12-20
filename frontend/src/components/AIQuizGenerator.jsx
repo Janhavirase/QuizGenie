@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Sparkles, BrainCircuit, Target, Layers, FileText, ArrowLeft } from 'lucide-react';
-
+import { toast } from 'react-hot-toast'; // <--- ADD THIS
 const AIQuizGenerator = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -17,10 +17,10 @@ const AIQuizGenerator = () => {
   });
 
   const handleGenerate = async () => {
-    if (!formData.topic.trim()) return alert("Please enter a topic!");
+    if (!formData.topic.trim()) return toast.error("Please enter a topic first!");
     
     setLoading(true);
-
+const toastId = toast.loading("🤖 AI is brainstorming your quiz...");
     try {
         // 1. Prepare Prompt Context for the AI
         // We append context to the topic so the AI understands the vibe without changing backend logic
@@ -37,7 +37,7 @@ const AIQuizGenerator = () => {
             const aiQuestions = res.data.data;
 
             // 3. GENERATE FIXED SLIDES
-            
+            toast.success("Quiz generated successfully!", { id: toastId });
             // Slide 1: Dynamic Title Screen
             const slideTitle = {
                 id: 1,
@@ -89,7 +89,7 @@ const AIQuizGenerator = () => {
         }
     } catch (error) {
         console.error(error);
-        alert("AI Generation failed. Ensure backend is running.");
+        toast.error("AI failed to generate. Try a simpler topic.", { id: toastId });
     } finally {
         setLoading(false);
     }
