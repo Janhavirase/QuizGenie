@@ -44,9 +44,7 @@ jobs:
       run: |
         cd backend
         npm ci
-
-    - name: Run Integration Tests
-      # We increase timeout just in case the CI runner is slow
+- name: Run Integration Tests
       run: |
         cd backend
-        npm test -- --testTimeout=10000
+        npm test -- --forceExit --detectOpenHandles
