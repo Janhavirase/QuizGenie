@@ -75,7 +75,7 @@ app.use(helmet());
 app.use(cors({
    origin: "*", // Add your specific frontend URLs
     methods: ["GET", "POST","PUT","DELETE"],
-    credentials: true
+    credentials: false
 }));
 
 // 3. Body Parsers
