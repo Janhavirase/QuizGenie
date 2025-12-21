@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import toast, { Toaster } from 'react-hot-toast'; 
 import { 
   Users, ArrowRight, Trophy, Cat, Heart, HelpCircle, ThumbsUp, ThumbsDown, 
-  CheckCircle2, XCircle, BarChart3, PieChart, Loader2, Clock, Share2, Play
+  CheckCircle2, XCircle, Loader2, Clock, Play
 } from 'lucide-react'; 
 
 const GameRoom = () => {
@@ -42,7 +42,6 @@ const GameRoom = () => {
   const [hasJoined, setHasJoined] = useState(false);
   
   const name = playerName; 
-  // ------------------------------------------------------------------
 
   // --- STATE ---
   const [players, setPlayers] = useState([]);
@@ -52,24 +51,16 @@ const GameRoom = () => {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [stats, setStats] = useState({}); 
   const [floatingEmojis, setFloatingEmojis] = useState([]);
-  
   const [answerHistory, setAnswerHistory] = useState([]);
   const [hostHistory, setHostHistory] = useState([]); 
   const [timeLeft, setTimeLeft] = useState(null);
   const [isRevealing, setIsRevealing] = useState(false);
-  
-  // ✅ Live Quiz Detection
   const [isQuizDetected, setIsQuizDetected] = useState(false);
-
-  // ✅ SOLO UPDATE: Track index locally
   const [soloIndex, setSoloIndex] = useState(0);
 
   const gameDataRef = useRef({ role, topic: "", hostHistory: [], players: [], stats: {} });
 
-  // 1. Initial Check: Is URL explicit?
   const isUrlQuizMode = searchParams.get('mode') === 'quiz';
-
-  // ✅ 2. FINAL ROBUST CHECK (Used for Rendering)
   const finalIsQuizMode = isUrlQuizMode || isQuizDetected || hostHistory.some(h => h.correctAnswer);
 
   useEffect(() => {
@@ -97,28 +88,15 @@ const GameRoom = () => {
   // --- SAVE REPORT LOGIC (Multiplayer Only) ---
   const saveGameReport = (incomingLeaderboard) => {
     const { topic, hostHistory, players } = gameDataRef.current;
-
-    const leaderboard = (incomingLeaderboard && incomingLeaderboard.length > 0) 
-        ? incomingLeaderboard 
-        : players;
-
-    if (leaderboard.length === 0) {
-        console.warn("⚠️ Warning: Saving report with 0 players.");
-    }
+    const leaderboard = (incomingLeaderboard && incomingLeaderboard.length > 0) ? incomingLeaderboard : players;
 
     const totalPlayers = leaderboard.length;
-    const avgScore = totalPlayers > 0 
-        ? Math.round(leaderboard.reduce((acc, p) => acc + p.score, 0) / totalPlayers) 
-        : 0;
+    const avgScore = totalPlayers > 0 ? Math.round(leaderboard.reduce((acc, p) => acc + p.score, 0) / totalPlayers) : 0;
 
     const questionStats = hostHistory.map((h, i) => {
         const totalVotes = Object.values(h.stats || {}).reduce((a, b) => a + Number(b), 0);
         const correctCount = h.stats && h.correctAnswer ? (Number(h.stats[h.correctAnswer]) || 0) : 0;
-        return {
-            name: `Q${i+1}`,
-            correct: correctCount,
-            wrong: totalVotes - correctCount
-        };
+        return { name: `Q${i+1}`, correct: correctCount, wrong: totalVotes - correctCount };
     });
     
     const toughest = questionStats.reduce((min, q) => q.correct < min.correct ? q : min, questionStats[0]);
@@ -138,14 +116,11 @@ const GameRoom = () => {
     const filtered = allReports.filter(r => r.quizId !== activeRoomId);
     filtered.push(newReport);
     localStorage.setItem('quizgenie_reports', JSON.stringify(filtered));
-    
     toast.success("Session Report Saved Successfully!", { icon: '📊', duration: 4000 });
   };
 
-  // --- SOCKET & INIT LISTENERS ---
-
+  // --- INIT LISTENERS ---
   useEffect(() => {
-      // ✅ SOLO UPDATE: Initialize Solo Mode immediately
       if (isSolo) {
           setTopic(location.state?.topic || "Solo Challenge");
           setGameStatus('playing');
@@ -153,59 +128,39 @@ const GameRoom = () => {
               const startQ = soloQuestions[0];
               setCurrentQuestion(startQ);
               setTimeLeft(startQ.timeLimit || 20);
-              // Check if first question makes it a quiz
               if (startQ.correctAnswer) setIsQuizDetected(true);
           }
           return; 
       }
-
-      // Multiplayer Logic - Logic to restore session (if name exists)
+      // Resume session logic
       const savedSession = localStorage.getItem("quiz_session");
       if (savedSession && !isTeacher) {
           const { roomCode, savedName } = JSON.parse(savedSession);
           if (roomCode === activeRoomId && !name && savedName) {
-               // If we found a saved name, update state so logic proceeds
                setPlayerName(savedName);
           }
       }
   }, []); 
 
   // -------------------------------------------------------
-  // ✅ FIXED SOCKET JOIN LOGIC (Robust Connection)
+  // ✅ STABLE CONNECTION LOGIC (No Manual Reconnects)
   // -------------------------------------------------------
   useEffect(() => {
-    // 1. Bypass if Solo
     if (isSolo) return;
-
-    // 2. Stop if Modal is Open or Already Joined
     if (isNameModalOpen) return;
     if (hasJoined) return;
-
-    // 3. Stop if no name and not teacher
     if (!name && !isTeacher) return;
 
-    // 4. Save session for reconnects
     if (!isTeacher && name !== 'Guest') {
-        localStorage.setItem("quiz_session", JSON.stringify({
-            roomCode: activeRoomId,
-            savedName: name
-        }));
+        localStorage.setItem("quiz_session", JSON.stringify({ roomCode: activeRoomId, savedName: name }));
     }
 
-    // ✅ FORCE CONNECT IF DISCONNECTED (The Critical Fix)
-    if (!socket.connected) {
-        console.log("🔌 Socket disconnected, forcing connection...");
-        socket.connect();
-    }
-
-    // ✅ JOIN ROOM
+    // ✅ SIMPLE JOIN: Just emit the event. Socket is already connected by autoConnect.
     console.log(`🚀 Emitting Join: Room=${activeRoomId}, Name=${name}`);
     socket.emit("join_room", { roomCode: activeRoomId, playerName: isTeacher ? "___HOST___" : name });
     
-    // Mark as joined so we don't spam emit
     setHasJoined(true); 
 
-    // Listeners
     socket.on("update_players", (list) => setPlayers(list.filter(p => p.name !== "___HOST___").sort((a,b) => b.score - a.score)));
     
     socket.on("new_question", ({ question, topic }) => {
@@ -217,28 +172,19 @@ const GameRoom = () => {
         setIsRevealing(false); 
         setTimeLeft(null); 
         if (question.type === 'mcq' && question.correctAnswer) playSound("tick");
-
-        // ✅ CHECK EVERY NEW QUESTION
-        if (question.correctAnswer) {
-            setIsQuizDetected(true);
-        }
+        if (question.correctAnswer) setIsQuizDetected(true);
     });
 
     socket.on("update_stats", (newStats) => setStats(newStats));
-    
     socket.on("game_over", (finalLeaderboard) => {
         setGameStatus("finished");
         stopSound("tick");
         playSound("win");
-        if (gameDataRef.current.role === 'host') {
-            saveGameReport(finalLeaderboard);
-        }
+        if (gameDataRef.current.role === 'host') saveGameReport(finalLeaderboard);
     });
-
-    const handleEmoji = (data) => {
+    socket.on("reaction_received", (data) => {
         setFloatingEmojis(prev => [...prev, { id: Date.now()+Math.random(), icon: REACTION_ICONS[data.reactionId] || <ThumbsUp/>, left: Math.random()*80+10+'%' }]);
-    };
-    socket.on("reaction_received", handleEmoji);
+    });
 
     return () => {
         socket.off("update_players");
@@ -250,56 +196,36 @@ const GameRoom = () => {
     };
   }, [activeRoomId, isSolo, name, isNameModalOpen, hasJoined]);
 
-  // --- 2. TIMER & LOGIC ---
+  // --- TIMER LOGIC ---
   useEffect(() => {
-      // ✅ SOLO UPDATE: Stop timer if revealing in solo
-      if (isSolo && isRevealing) {
-        setTimeLeft(null);
-        return;
-      }
-
+      if (isSolo && isRevealing) { setTimeLeft(null); return; }
       if (!currentQuestion || gameStatus !== 'playing' || isRevealing || currentQuestion.type === 'info' || currentQuestion.type === 'ending') {
           if (!isRevealing) setTimeLeft(null);
           return;
       }
-
       const hasTimer = (currentQuestion.timeLimit && currentQuestion.timeLimit > 0);
-
       if (hasTimer) {
           const startLimit = currentQuestion.timeLimit;
           setTimeLeft(prev => prev === null ? startLimit : prev);
-
           const timer = setInterval(() => {
               setTimeLeft((prev) => {
                   if (prev <= 1) {
                       clearInterval(timer);
                       setIsRevealing(true); 
-                      
-                      // ✅ SOLO UPDATE: Handle Time's Up locally
                       if (isSolo) {
                           setHasAnswered(true); 
                           setAnswerHistory(prev => [...prev, {
-                             question: currentQuestion.questionText,
-                             myAnswer: null,
-                             correctAnswer: currentQuestion.correctAnswer,
-                             isCorrect: false,
-                             type: currentQuestion.type
+                             question: currentQuestion.questionText, myAnswer: null,
+                             correctAnswer: currentQuestion.correctAnswer, isCorrect: false, type: currentQuestion.type
                           }]);
                           return 0;
                       }
-
-                      // Multiplayer Host Logic
                       if (gameDataRef.current.role === 'host') {
                           const currentStats = gameDataRef.current.stats; 
                           setHostHistory(prevH => {
                               if (prevH.some(h => h.question === currentQuestion.questionText)) return prevH;
-                              return [...prevH, { 
-                                  question: currentQuestion.questionText, 
-                                  correctAnswer: currentQuestion.correctAnswer, 
-                                  stats: currentStats 
-                              }];
+                              return [...prevH, { question: currentQuestion.questionText, correctAnswer: currentQuestion.correctAnswer, stats: currentStats }];
                           });
-                          
                           setTimeout(() => socket.emit("next_question", { roomId: activeRoomId }), 5000);
                       }
                       return 0;
@@ -316,22 +242,17 @@ const GameRoom = () => {
   // --- ACTIONS ---
   const handleNext = () => socket.emit("next_question", { roomId: activeRoomId });
   
-  // ✅ SOLO UPDATE: Local "Next" handler
   const handleSoloNext = () => {
       const nextIdx = soloIndex + 1;
-      
       if (nextIdx < soloQuestions.length) {
           setSoloIndex(nextIdx);
           const nextQ = soloQuestions[nextIdx];
           setCurrentQuestion(nextQ);
-          // Check if next question makes it a quiz
           if (nextQ.correctAnswer) setIsQuizDetected(true);
-          
           setIsRevealing(false);
           setHasAnswered(false);
           setTimeLeft(nextQ.timeLimit || 20);
       } else {
-          // End of Solo Game
           setGameStatus("finished");
           playSound("win");
       }
@@ -341,35 +262,21 @@ const GameRoom = () => {
       if (hasAnswered || isTeacher || isRevealing) return;
       setHasAnswered(true);
 
-      // ✅ SOLO UPDATE: Local Answer Logic
       if (isSolo) {
           setIsRevealing(true);
           const isCorrect = currentQuestion.correctAnswer === val;
           if(isCorrect) playSound("correct"); else playSound("wrong");
-          
           toast(isCorrect ? "Correct!" : "Wrong!", { icon: isCorrect ? '🎉' : '❌' });
-
           setAnswerHistory(prev => [...prev, {
-              question: currentQuestion.questionText,
-              myAnswer: val,
-              correctAnswer: currentQuestion.correctAnswer,
-              isCorrect: isCorrect,
-              type: currentQuestion.type
+              question: currentQuestion.questionText, myAnswer: val, correctAnswer: currentQuestion.correctAnswer, isCorrect: isCorrect, type: currentQuestion.type
           }]);
           return;
       }
-
-      // Multiplayer Logic
       socket.emit("submit_answer", { roomId: activeRoomId, playerName: name, answer: val, timeLeft: timeLeft });
       toast.success("Answer Submitted!", { icon: '🚀', position: 'bottom-center' });
-
       if (currentQuestion && currentQuestion.type !== 'info') {
           setAnswerHistory(prev => [...prev, {
-              question: currentQuestion.questionText,
-              myAnswer: val,
-              correctAnswer: currentQuestion.correctAnswer,
-              isCorrect: currentQuestion.correctAnswer === val,
-              type: currentQuestion.type
+              question: currentQuestion.questionText, myAnswer: val, correctAnswer: currentQuestion.correctAnswer, isCorrect: currentQuestion.correctAnswer === val, type: currentQuestion.type
           }]);
       }
   };
@@ -393,7 +300,6 @@ const GameRoom = () => {
                       <Trophy size={120} className="text-yellow-400 drop-shadow-2xl" />
                   </div>
                   <h1 className="text-7xl font-black mb-6 tracking-tight text-white">
-                      {/* ✅ USE FINAL CHECK FOR TEXT */}
                       {finalIsQuizMode ? "Quiz Complete!" : "Session Closed"}
                   </h1>
                   <p className="text-3xl text-slate-300 font-light max-w-2xl mx-auto leading-relaxed">
@@ -405,7 +311,6 @@ const GameRoom = () => {
       }
 
       const layout = currentQuestion.layout || 'centered';
-      
       return (
           <div className={`w-full h-full flex flex-col justify-center animate-fade-in-up p-12 ${layout === 'left' ? 'items-start text-left' : 'items-center text-center'}`}>
               <div className="mb-8">
@@ -414,11 +319,9 @@ const GameRoom = () => {
                     <div className="p-4 bg-indigo-500/20 rounded-2xl"><HelpCircle size={60} className="text-indigo-400"/></div>
                   }
               </div>
-              
               <h1 className="text-6xl font-extrabold mb-10 leading-[1.1] drop-shadow-xl max-w-6xl text-white">
                   {currentQuestion.questionText}
               </h1>
-
               {layout === 'bullets' ? (
                   <div className="bg-black/30 backdrop-blur-md p-10 rounded-3xl border border-white/10 shadow-2xl">
                       <ul className="text-left space-y-6 text-3xl font-medium text-slate-200">
@@ -454,7 +357,6 @@ const GameRoom = () => {
                       const isWrong = isRevealing && !isCorrect;
                       const barColor = isCorrect ? '#10b981' : isWrong ? '#334155' : '#6366f1';
                       const textColor = isWrong ? 'text-slate-500' : 'text-white';
-                      
                       return (
                           <div key={i} className="relative w-full h-20 bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-700/50 shadow-inner">
                               <div className="absolute top-0 left-0 h-full transition-all duration-1000 ease-out shadow-[0_0_20px_rgba(0,0,0,0.2)]" style={{width: `${pct}%`, backgroundColor: barColor}}></div>
@@ -482,16 +384,10 @@ const GameRoom = () => {
               currentAngle = end;
               return `${colors[i % colors.length]} ${start}% ${end}%`;
           }).join(', ');
-
           return (
               <div className="w-full h-full flex flex-col items-center justify-center p-6 animate-scale-up">
                   <div className="relative rounded-full transition-all duration-700 shadow-[0_0_50px_rgba(99,102,241,0.2)] border-8 border-slate-800"
-                      style={{ 
-                          width: '400px', 
-                          height: '400px', 
-                          background: totalVotes === 0 ? '#1e293b' : `conic-gradient(${gradients})` 
-                      }}
-                  >
+                      style={{ width: '400px', height: '400px', background: totalVotes === 0 ? '#1e293b' : `conic-gradient(${gradients})` }} >
                       {vizType === 'donut' && (
                           <div className="absolute inset-0 m-auto rounded-full backdrop-blur-xl bg-slate-900/90 flex items-center justify-center flex-col border border-slate-700" style={{ width: '65%', height: '65%' }}>
                                {isRevealing && (
@@ -504,7 +400,6 @@ const GameRoom = () => {
                           </div>
                       )}
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4 mt-10 w-full max-w-4xl">
                       {currentQuestion.options.map((opt, i) => {
                           const count = Number(stats[opt]) || 0;
@@ -558,26 +453,14 @@ const GameRoom = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex overflow-hidden relative font-sans">
       <Toaster />
-      
-      {/* Floating Emojis */}
       <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
         {floatingEmojis.map(e => (
-            <div 
-                key={e.id} 
-                className="absolute text-6xl animate-float-up filter drop-shadow-lg will-change-transform" 
-                style={{ 
-                    left: e.left, 
-                    bottom: '-10%' // ✅ Force them to start below the screen
-                }}
-            >
-                {e.icon}
-            </div>
+            <div key={e.id} className="absolute text-6xl animate-float-up filter drop-shadow-lg will-change-transform" style={{ left: e.left, bottom: '-10%' }}>{e.icon}</div>
         ))}
      </div>
 
       {isTeacher ? (
         <>
-            {/* --- TEACHER SIDEBAR (Command Center) --- */}
             <div className="w-80 bg-slate-900 border-r border-slate-800 flex flex-col items-center p-6 shadow-2xl z-20">
                 <div className="w-full bg-indigo-600 rounded-2xl p-5 text-center shadow-[0_0_30px_rgba(79,70,229,0.3)] mb-8 transform hover:scale-[1.02] transition cursor-default border border-indigo-400/30">
                     <p className="text-[10px] font-extrabold text-indigo-100 uppercase tracking-[0.2em] mb-2 opacity-80">Join At</p>
@@ -585,13 +468,10 @@ const GameRoom = () => {
                     <div className="h-px bg-indigo-400/30 w-full mb-3"></div>
                     <p className="text-5xl font-mono font-black text-white tracking-widest drop-shadow-md">{activeRoomId}</p>
                 </div>
-
                 <div className="bg-white p-4 rounded-2xl mb-8 shadow-xl"><QRCodeCanvas value={`${HOST_URL}/game/${activeRoomId}`} size={180} /></div>
-
                 <div className="flex items-center gap-3 text-slate-300 bg-slate-800 px-6 py-3 rounded-full mb-8 font-bold border border-slate-700 shadow-inner">
                     <Users size={20} className="text-indigo-400"/> <span>{players.length} Ready</span>
                 </div>
-
                 {timeLeft !== null && !isRevealing && (
                     <div className="mb-8 w-full text-center">
                         <div className={`text-8xl font-black font-mono tabular-nums leading-none tracking-tighter ${timeLeft < 5 ? 'text-rose-500 animate-pulse' : 'text-indigo-400'}`}>
@@ -605,18 +485,9 @@ const GameRoom = () => {
                         <Clock size={24}/> Time's Up!
                     </div>
                 )}
-
                 <div className="mt-auto w-full">
                     {gameStatus === 'playing' && (
-                        <button 
-                            onClick={handleNext} 
-                            disabled={isRevealing || (timeLeft !== null)} 
-                            className={`w-full py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-3 shadow-lg ${
-                                isRevealing || (timeLeft !== null) 
-                                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' 
-                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
-                            }`}
-                        >
+                        <button onClick={handleNext} disabled={isRevealing || (timeLeft !== null)} className={`w-full py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-3 shadow-lg ${isRevealing || (timeLeft !== null) ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'}`}>
                             {isRevealing ? <><Loader2 size={24} className="animate-spin"/> Saving Stats...</> : <>Next Slide <ArrowRight size={24}/></>}
                         </button>
                     )}
@@ -628,7 +499,6 @@ const GameRoom = () => {
                 </div>
             </div>
 
-            {/* --- TEACHER MAIN DISPLAY (Cinema Mode) --- */}
             <div className="flex-1 p-16 flex flex-col relative transition-colors duration-700 overflow-y-auto" style={getThemeStyle()}>
                 {gameStatus === 'lobby' && (
                     <div className="flex-1 flex flex-col items-center justify-center text-center">
@@ -638,16 +508,12 @@ const GameRoom = () => {
                         <p className="text-3xl text-slate-400 mb-16 max-w-3xl leading-relaxed font-light">
                             Grab your devices. The session is about to begin.
                         </p>
-                        <button 
-                            onClick={() => socket.emit("start_game", { roomId: activeRoomId })} 
-                            className="group relative px-16 py-6 bg-emerald-500 hover:bg-emerald-400 rounded-full font-black text-3xl shadow-[0_0_50px_rgba(16,185,129,0.4)] text-white transition-all transform hover:scale-105 active:scale-95 flex items-center gap-4"
-                        >
+                        <button onClick={() => socket.emit("start_game", { roomId: activeRoomId })} className="group relative px-16 py-6 bg-emerald-500 hover:bg-emerald-400 rounded-full font-black text-3xl shadow-[0_0_50px_rgba(16,185,129,0.4)] text-white transition-all transform hover:scale-105 active:scale-95 flex items-center gap-4">
                             Start Session <Play size={36} className="fill-current"/>
                             <div className="absolute inset-0 rounded-full ring-4 ring-white/20 group-hover:ring-white/40 animate-pulse"></div>
                         </button>
                     </div>
                 )}
-
                 {gameStatus === 'playing' && currentQuestion && (
                     <div className="flex-1 flex-col items-center justify-center w-full max-w-[90rem] mx-auto flex">
                         {currentQuestion.type !== 'info' && currentQuestion.type !== 'ending' && (
@@ -668,16 +534,12 @@ const GameRoom = () => {
                          )}
                     </div>
                 )}
-
-                {/* ✅ FIX: Pass the ROBUST final check to Analytics */}
                 {gameStatus === 'finished' && <Analytics players={players} hostHistory={hostHistory} isTeacher={true} onExit={() => navigate('/teacher')} isQuizMode={finalIsQuizMode} />}
             </div>
         </>
       ) : (
-        /* --- STUDENT / SOLO VIEW (Mobile Optimized) --- */
         <div className="w-full flex flex-col items-center justify-center min-h-screen p-6 relative transition-colors duration-500 font-sans" style={getThemeStyle()}>
             
-            {/* ✅ SOLO UPDATE: Solo Header (Question Count) */}
             {isSolo && gameStatus === 'playing' && (
                 <div className="absolute top-6 left-6 z-50 flex items-center gap-4">
                     <div className="bg-black/30 backdrop-blur px-4 py-2 rounded-full border border-white/10">
@@ -687,7 +549,6 @@ const GameRoom = () => {
                 </div>
             )}
 
-            {/* ✅ FIXED: Only show "You're In" if it is MULTIPLAYER. Hide it for Solo. */}
             {gameStatus === 'lobby' && !isSolo && !isNameModalOpen && (
                 <div className="text-center animate-fade-in flex flex-col items-center">
                     <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-2xl shadow-green-500/30 animate-bounce">
@@ -699,7 +560,6 @@ const GameRoom = () => {
                 </div>
             )}
 
-            {/* ✅ ADDED: Loading state for Solo while questions load */}
             {isSolo && !currentQuestion && (
                 <div className="flex flex-col items-center justify-center h-64">
                     <Loader2 size={48} className="animate-spin text-blue-400 mb-4" />
@@ -707,11 +567,8 @@ const GameRoom = () => {
                 </div>
             )}
             
-            {/* GAME PLAYING SECTION */}
             {gameStatus === 'playing' && currentQuestion && (
                 <div className="w-full max-w-md pb-32">
-                    
-                    {/* TIMER UI */}
                     {timeLeft !== null && !isRevealing && (
                         <div className="w-full mb-8 bg-slate-900/50 p-4 rounded-2xl border border-white/10 backdrop-blur-md">
                             <div className="flex justify-between items-end mb-2 px-1">
@@ -723,7 +580,6 @@ const GameRoom = () => {
                             </div>
                         </div>
                     )}
-
                     {currentQuestion.type === 'info' ? (
                         <div className="text-center bg-slate-900/40 p-10 rounded-[2rem] border border-white/10 shadow-2xl backdrop-blur-xl">
                             {currentQuestion.layout === 'title' && <div className="text-6xl mb-8 animate-pulse">✨</div>}
@@ -738,7 +594,6 @@ const GameRoom = () => {
                         </div>
                     ) : isRevealing ? (
                         <div className="text-center animate-scale-up">
-                            {/* Result Card */}
                             {answerHistory[answerHistory.length-1]?.isCorrect ? (
                                 <div className="bg-emerald-600 p-12 rounded-[2.5rem] shadow-[0_20px_50px_rgba(16,185,129,0.3)]">
                                     <CheckCircle2 size={100} className="mx-auto text-white mb-6 drop-shadow-md"/>
@@ -750,13 +605,8 @@ const GameRoom = () => {
                                     <h2 className="text-5xl font-black text-white mb-2 tracking-tight">Wrong</h2>
                                 </div>
                             )}
-
-                             {/* ✅ SOLO UPDATE: Next Button for Solo Mode */}
                              {isSolo && (
-                                <button 
-                                    onClick={handleSoloNext}
-                                    className="mt-8 w-full py-4 bg-white text-slate-900 rounded-xl font-black text-xl hover:scale-105 transition shadow-xl flex items-center justify-center gap-2"
-                                >
+                                <button onClick={handleSoloNext} className="mt-8 w-full py-4 bg-white text-slate-900 rounded-xl font-black text-xl hover:scale-105 transition shadow-xl flex items-center justify-center gap-2">
                                     Next Question <ArrowRight />
                                 </button>
                              )}
@@ -766,11 +616,7 @@ const GameRoom = () => {
                             <div className="flex flex-col gap-4">
                                 <h3 className="text-2xl font-bold mb-4 text-center text-white drop-shadow-md leading-snug">{currentQuestion.questionText}</h3>
                                 {currentQuestion.options.map((o, i)=>(
-                                    <button 
-                                        key={i} 
-                                        onClick={()=>handleAnswer(o)} 
-                                        className="p-6 bg-slate-800/80 hover:bg-indigo-600 active:scale-[0.98] transition-all duration-200 rounded-2xl border-2 border-slate-700/50 hover:border-indigo-400 font-bold text-xl text-center shadow-lg hover:shadow-indigo-500/20 backdrop-blur-sm"
-                                    >
+                                    <button key={i} onClick={()=>handleAnswer(o)} className="p-6 bg-slate-800/80 hover:bg-indigo-600 active:scale-[0.98] transition-all duration-200 rounded-2xl border-2 border-slate-700/50 hover:border-indigo-400 font-bold text-xl text-center shadow-lg hover:shadow-indigo-500/20 backdrop-blur-sm">
                                         {o}
                                     </button>
                                 ))}
@@ -788,7 +634,6 @@ const GameRoom = () => {
                 </div>
             )}
             
-            {/* REACTION BAR (Hidden during reveal/solo) */}
             {currentQuestion?.allowedReactions && !isRevealing && currentQuestion.type !== 'ending' && !isSolo && (
                 <div className="fixed bottom-10 left-0 right-0 flex justify-center pointer-events-none z-50">
                     <div className="bg-slate-900/90 backdrop-blur-2xl border border-slate-700 rounded-full px-8 py-4 flex gap-8 shadow-2xl pointer-events-auto transform hover:scale-105 transition ring-1 ring-white/10">
@@ -800,20 +645,13 @@ const GameRoom = () => {
                     </div>
                 </div>
             )}
-
-            {/* SOLO FINISH SCREEN */}
             {gameStatus === 'finished' && <Analytics players={players} history={answerHistory} isTeacher={false} onExit={() => navigate('/')} isQuizMode={finalIsQuizMode} />}
 
-            {/* ✅ NAME ENTRY MODAL (Added for QR Code Users) */}
             {isNameModalOpen && (
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4">
                     <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center relative overflow-hidden">
                          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
-                         
-                         <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-400 ring-1 ring-indigo-500/30">
-                            <Users size={32} />
-                        </div>
-
+                         <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-400 ring-1 ring-indigo-500/30"><Users size={32} /></div>
                         <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Who are you?</h2>
                         <p className="text-slate-400 text-sm mb-6 font-medium">Enter your name to join the session.</p>
 
@@ -821,26 +659,13 @@ const GameRoom = () => {
                             e.preventDefault();
                             const val = e.target.name.value.trim();
                             if(val) {
+                                // ✅ PURE UPDATE: Simply set name. 
+                                // The useEffect above will detect the name change and use the existing socket to join.
                                 setPlayerName(val);
-                                // ✅ FORCE JOIN IMMEDIATELY ON SUBMIT
-                                if (!socket.connected) {
-                                    console.log("🔌 Connecting socket...");
-                                    socket.connect();
-                                }
-                                socket.emit("join_room", { roomCode: activeRoomId, playerName: val });
-                                setHasJoined(true);
                                 setIsNameModalOpen(false);
-                                toast.success("Joining game...");
                             }
                         }}>
-                            <input 
-                                name="name" 
-                                autoFocus 
-                                placeholder="Your Name" 
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white mb-4 text-center font-bold text-lg outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-700" 
-                                required 
-                                autoComplete="off"
-                            />
+                            <input name="name" autoFocus placeholder="Your Name" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white mb-4 text-center font-bold text-lg outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-700" required autoComplete="off" />
                             <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]">
                                 Join Game 🚀
                             </button>
