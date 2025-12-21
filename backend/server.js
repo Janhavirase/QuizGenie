@@ -35,8 +35,8 @@ app.use(cors({
 
 // 2. Handle Preflight Requests Explicitly
 // Forces the server to say "OK" to the browser's initial safety check
-app.options('*', cors());
-
+// ✅ FIX: Use Regex instead of string '*' to prevent PathError
+app.options(/.*/, cors());
 // 3. Security Headers (Helmet)
 app.use(helmet({
     crossOriginResourcePolicy: false, // Fixes blocking of assets
