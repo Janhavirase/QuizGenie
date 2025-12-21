@@ -73,7 +73,7 @@ app.use(helmet());
 
 // 2. Prevent CORS errors (Restrict in production!)
 app.use(cors({
-    origin: ["http://localhost:5173", "https://your-production-url.com"], // Add your specific frontend URLs
+   origin: "*", // Add your specific frontend URLs
     methods: ["GET", "POST","PUT","DELETE"],
     credentials: true
 }));

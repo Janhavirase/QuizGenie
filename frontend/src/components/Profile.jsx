@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast'; // ✅ Added Toaster
+import toast, { Toaster } from 'react-hot-toast'; 
+import QRCode from 'react-qr-code'; // ✅ IMPORTED QR CODE
 import { 
     User, Mail, Calendar, LogOut, 
     FileText, ArrowLeft, Settings, Trash2, X, Save, 
-    Shield, Activity, CreditCard, Layout
+    Shield, Activity, CreditCard, Layout, QrCode
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -22,20 +23,31 @@ const Profile = () => {
   const [editForm, setEditForm] = useState({ name: "", password: "" });
   const [isSaving, setIsSaving] = useState(false);
 
+  // ✅ DYNAMIC LINK GENERATION FOR QR CODE
+  const siteUrl = window.location.origin;
+  const profileLink = profile ? `${siteUrl}/student/stats/${profile._id}` : siteUrl;
+
   // ✅ 1. FETCH USER DATA & LOCAL QUIZZES
   useEffect(() => {
     const fetchUserData = async () => {
         const userId = user?.id || user?._id;
+        
+        // ⚡ FALLBACK: Set profile from Context immediately so UI isn't empty
+        if (user && !profile) {
+            setProfile({
+                name: user.name,
+                email: user.email,
+                _id: userId,
+                createdAt: user.createdAt || new Date().toISOString()
+            });
+            setEditForm({ name: user.name, password: "" });
+        }
+
         if (!userId) return;
 
         // DEMO MODE CHECK
         if (userId === "demo-user-id") {
-            setProfile({
-                name: user.name,
-                email: user.email,
-                _id: "demo-user-id",
-                createdAt: new Date().toISOString()
-            });
+            setLoading(false);
             return;
         }
 
@@ -48,12 +60,7 @@ const Profile = () => {
             }
         } catch (err) {
             console.error(err);
-             setProfile({
-                name: user?.name || "User",
-                email: user?.email || "No Email",
-                _id: userId,
-                createdAt: new Date().toISOString()
-            });
+            // Fallback is already handled above
         }
     };
 
@@ -72,7 +79,7 @@ const Profile = () => {
     }
   }, [user]);
 
-  // ✅ 2. SEPARATE HOOK FOR HISTORY (This was the error source)
+  // ✅ 2. SEPARATE HOOK FOR HISTORY
   useEffect(() => {
     if (user?.id && user.id !== "demo-user-id") {
         fetch(`https://quizgenie-22xy.onrender.com/api/results/${user.id}`)
@@ -138,6 +145,7 @@ const Profile = () => {
   const handleLogout = () => {
     if(logout) logout();
     localStorage.removeItem('token'); 
+    localStorage.removeItem('user'); // Clear user to force refresh next time
     toast.success("Logged out successfully");
     navigate('/login');
   };
@@ -161,6 +169,7 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-6 md:p-8 lg:p-12 pt-24 relative selection:bg-indigo-500/30">
+      <Toaster />
       
       {/* PROFESSIONAL BACKGROUND EFFECTS */}
       <div className="fixed top-0 left-0 w-full h-[500px] bg-gradient-to-b from-indigo-900/10 to-transparent pointer-events-none" />
@@ -233,22 +242,34 @@ const Profile = () => {
                 </div>
             </div>
 
-            {/* Read Only Details */}
+            {/* Read Only Details & QR CODE */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-5 ml-1">Metadata</h3>
                 <div className="space-y-4">
                     <div className="flex items-center gap-4 text-slate-400 hover:text-slate-200 transition group p-2 rounded-xl hover:bg-slate-800/50">
                         <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-indigo-500/20 group-hover:text-indigo-400 transition"><Mail size={16}/></div> 
-                        <span className="text-sm font-medium">{profile?.email}</span>
+                        <span className="text-sm font-medium">{profile?.email || "No Email"}</span>
                     </div>
                     <div className="flex items-center gap-4 text-slate-400 hover:text-slate-200 transition group p-2 rounded-xl hover:bg-slate-800/50">
                         <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-purple-500/20 group-hover:text-purple-400 transition"><Calendar size={16}/></div> 
-                        <span className="text-sm font-medium">Joined {new Date(profile?.createdAt).toLocaleDateString()}</span>
+                        <span className="text-sm font-medium">Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "Unknown"}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-slate-400 hover:text-slate-200 transition group p-2 rounded-xl hover:bg-slate-800/50">
-                        <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-orange-500/20 group-hover:text-orange-400 transition"><CreditCard size={16}/></div> 
-                        <span className="text-sm font-medium tracking-wide">ID: {profile?._id?.substring(0,8)}...</span>
+                    
+                    {/* ✅ QR CODE SECTION ADDED HERE */}
+                    <div className="pt-4 border-t border-slate-800 mt-4">
+                        <div className="flex flex-col items-center bg-white p-3 rounded-xl border-4 border-slate-800 shadow-xl">
+                             <div style={{ height: "auto", margin: "0 auto", maxWidth: 80, width: "100%" }}>
+                                <QRCode
+                                    size={256}
+                                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                    value={profileLink}
+                                    viewBox={`0 0 256 256`}
+                                />
+                            </div>
+                        </div>
+                        <p className="text-center text-[10px] text-slate-500 mt-2 uppercase font-bold tracking-widest">Player Card</p>
                     </div>
+
                 </div>
             </div>
 
