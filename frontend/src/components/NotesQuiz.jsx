@@ -32,7 +32,7 @@ const NotesQuiz = () => {
       };
 
       // 3. API Call (✅ Updated Endpoint)
-      const res = await axios.post('http://localhost:5000/api/ai/upload', payload);
+      const res = await axios.post('https://quizgenie-22xy.onrender.com/api/ai/upload', payload);
 
       if (res.data.success) {
         toast.success("Quiz Ready!", { id: toastId });

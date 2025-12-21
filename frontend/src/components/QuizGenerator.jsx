@@ -23,7 +23,7 @@ const QuizGenerator = () => {
 
     try {
       // Calling your Backend API
-      const res = await axios.post('http://localhost:5000/api/ai/generate', {
+      const res = await axios.post('https://quizgenie-22xy.onrender.com/api/ai/generate', {
         topic,
         difficulty,
         amount: 5 // We ask for 5 questions

@@ -71,7 +71,7 @@ const Study = () => {
     if (!user || !user.id) return; // Don't save for guests
 
     try {
-        await fetch('http://localhost:5000/api/results', {
+        await fetch('https://quizgenie-22xy.onrender.com/api/results', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

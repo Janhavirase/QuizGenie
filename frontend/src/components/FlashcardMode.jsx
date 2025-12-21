@@ -28,7 +28,7 @@ const FlashcardMode = () => {
     if (!topic.trim()) return alert("Please enter a topic!");
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/api/ai/generate', {
+      const res = await axios.post('https://quizgenie-22xy.onrender.com/api/ai/generate', {
         topic, difficulty, amount, type
       });
       if (res.data.success) {

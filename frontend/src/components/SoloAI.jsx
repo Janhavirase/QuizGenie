@@ -23,7 +23,7 @@ const SoloAI = () => {
 
     try {
       // 2. Send Request to Server
-      const res = await axios.post('http://localhost:5000/api/ai/generate', {
+      const res = await axios.post('https://quizgenie-22xy.onrender.com/api/ai/generate', {
         topic, 
         count: Number(amount), // ⚠️ FORCE NUMBER TYPE
         difficulty

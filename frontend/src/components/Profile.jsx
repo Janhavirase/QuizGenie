@@ -40,7 +40,7 @@ const Profile = () => {
         }
 
         try {
-            const res = await fetch(`http://localhost:5000/api/users/${userId}`);
+            const res = await fetch(`https://quizgenie-22xy.onrender.com/api/users/${userId}`);
             if (res.ok) {
                 const data = await res.json();
                 setProfile(data);
@@ -75,7 +75,7 @@ const Profile = () => {
   // ✅ 2. SEPARATE HOOK FOR HISTORY (This was the error source)
   useEffect(() => {
     if (user?.id && user.id !== "demo-user-id") {
-        fetch(`http://localhost:5000/api/results/${user.id}`)
+        fetch(`https://quizgenie-22xy.onrender.com/api/results/${user.id}`)
             .then(res => res.json())
             .then(data => setHistory(data))
             .catch(err => console.error("History fetch error", err));
@@ -112,7 +112,7 @@ const Profile = () => {
 
     // REAL BACKEND UPDATE
     try {
-        const res = await fetch(`http://localhost:5000/api/users/${userId}`, {
+        const res = await fetch(`https://quizgenie-22xy.onrender.com/api/users/${userId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(editForm)
