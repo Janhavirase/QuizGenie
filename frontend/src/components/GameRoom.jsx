@@ -4,6 +4,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { socket } from '../socket'; 
 import { playSound, stopSound } from '../utils/sounds'; 
 import Analytics from './Analytics'; 
+import { useAuth } from '../context/AuthContext'; // ✅ ADDED: For Smart Name Detection
 import toast, { Toaster } from 'react-hot-toast'; 
 import { 
   Users, ArrowRight, Trophy, Cat, Heart, HelpCircle, ThumbsUp, ThumbsDown, 
@@ -16,6 +17,7 @@ const GameRoom = () => {
   const [searchParams] = useSearchParams();
   const activeRoomId = params.roomId || params.roomCode; 
   const location = useLocation();
+  const { user } = useAuth(); // ✅ ADDED: Get logged in user
   
   const REACTION_ICONS = {
     cat: <Cat size={24} />,
@@ -31,8 +33,20 @@ const GameRoom = () => {
 
   const isTeacher = location.state?.role === 'host';
   const role = location.state?.role; 
-  const name = location.state?.name || 'Guest';
   
+  // ------------------------------------------------------------------
+  // ✅ SMART NAME LOGIC (Replaces the old const name = ... line)
+  // ------------------------------------------------------------------
+  // 1. Try State (if typed in home) -> 2. Try Auth (if logged in) -> 3. Empty (Trigger Modal)
+  const [playerName, setPlayerName] = useState(location.state?.name || user?.name || "");
+  // Only open modal if we don't have a name AND we are not the host AND not in solo mode
+  const [isNameModalOpen, setIsNameModalOpen] = useState(!playerName && !isTeacher && !isSolo); 
+  const [hasJoined, setHasJoined] = useState(false);
+  
+  // Maintain 'name' variable for compatibility with rest of your code
+  const name = playerName; 
+  // ------------------------------------------------------------------
+
   // --- STATE ---
   const [players, setPlayers] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(null);
@@ -59,10 +73,6 @@ const GameRoom = () => {
   const isUrlQuizMode = searchParams.get('mode') === 'quiz';
 
   // ✅ 2. FINAL ROBUST CHECK (Used for Rendering)
-  // It is a quiz if:
-  // A. The URL says so.
-  // B. We detected a correct answer live during the game.
-  // C. The history of questions contains any correct answers (Safety Net).
   const finalIsQuizMode = isUrlQuizMode || isQuizDetected || hostHistory.some(h => h.correctAnswer);
 
   useEffect(() => {
@@ -152,12 +162,13 @@ const GameRoom = () => {
           return; 
       }
 
-      // Multiplayer Logic
+      // Multiplayer Logic - Logic to restore session (if name exists)
       const savedSession = localStorage.getItem("quiz_session");
       if (savedSession && !isTeacher) {
           const { roomCode, savedName } = JSON.parse(savedSession);
           if (roomCode === activeRoomId && !name && savedName) {
-              socket.emit("join_room", { roomCode: activeRoomId, playerName: savedName });
+               // If we found a saved name, update state so logic proceeds
+               setPlayerName(savedName);
           }
       }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -166,6 +177,15 @@ const GameRoom = () => {
     // ✅ SOLO UPDATE: Bypass socket listeners if playing solo
     if (isSolo) return;
 
+    // ✅ SMART NAME CHECK: Stop here if modal is open
+    if (isNameModalOpen) return;
+    
+    // ✅ PREVENT DOUBLE JOIN: Stop if already joined
+    if (hasJoined) return;
+
+    // Wait until we have a name (or are teacher)
+    if (!name && !isTeacher) return;
+
     if (!isTeacher && name !== 'Guest') {
         localStorage.setItem("quiz_session", JSON.stringify({
             roomCode: activeRoomId,
@@ -173,7 +193,9 @@ const GameRoom = () => {
         }));
     }
 
+    // ✅ JOIN ROOM (Now uses the specific name from state)
     socket.emit("join_room", { roomCode: activeRoomId, playerName: isTeacher ? "___HOST___" : name });
+    setHasJoined(true); // Mark as joined so we don't emit again
 
     socket.on("update_players", (list) => setPlayers(list.filter(p => p.name !== "___HOST___").sort((a,b) => b.score - a.score)));
     
@@ -217,7 +239,8 @@ const GameRoom = () => {
         socket.off("reaction_received");
         stopSound("tick");
     };
-  }, [activeRoomId, isSolo]);
+  // ✅ ADDED DEPENDENCIES: name, isNameModalOpen, hasJoined
+  }, [activeRoomId, isSolo, name, isNameModalOpen, hasJoined]);
 
   // --- 2. TIMER & LOGIC ---
   useEffect(() => {
@@ -657,7 +680,7 @@ const GameRoom = () => {
             )}
 
             {/* ✅ FIXED: Only show "You're In" if it is MULTIPLAYER. Hide it for Solo. */}
-            {gameStatus === 'lobby' && !isSolo && (
+            {gameStatus === 'lobby' && !isSolo && !isNameModalOpen && (
                 <div className="text-center animate-fade-in flex flex-col items-center">
                     <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-2xl shadow-green-500/30 animate-bounce">
                         <CheckCircle2 size={48} className="text-white"/>
@@ -728,7 +751,7 @@ const GameRoom = () => {
                                 >
                                     Next Question <ArrowRight />
                                 </button>
-                            )}
+                             )}
                         </div>
                     ) : (
                         !hasAnswered ? (
@@ -772,6 +795,43 @@ const GameRoom = () => {
 
             {/* SOLO FINISH SCREEN */}
             {gameStatus === 'finished' && <Analytics players={players} history={answerHistory} isTeacher={false} onExit={() => navigate('/')} isQuizMode={finalIsQuizMode} />}
+
+            {/* ✅ NAME ENTRY MODAL (Added for QR Code Users) */}
+            {isNameModalOpen && (
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center relative overflow-hidden">
+                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+                         
+                         <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-400 ring-1 ring-indigo-500/30">
+                            <Users size={32} />
+                        </div>
+
+                        <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Who are you?</h2>
+                        <p className="text-slate-400 text-sm mb-6 font-medium">Enter your name to join the session.</p>
+
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const val = e.target.name.value.trim();
+                            if(val) {
+                                setPlayerName(val);
+                                setIsNameModalOpen(false);
+                            }
+                        }}>
+                            <input 
+                                name="name" 
+                                autoFocus 
+                                placeholder="Your Name" 
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white mb-4 text-center font-bold text-lg outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-700" 
+                                required 
+                                autoComplete="off"
+                            />
+                            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]">
+                                Join Game 🚀
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
       )}
     </div>
