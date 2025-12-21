@@ -4,7 +4,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { socket } from '../socket'; 
 import { playSound, stopSound } from '../utils/sounds'; 
 import Analytics from './Analytics'; 
-import { useAuth } from '../context/AuthContext'; // ✅ ADDED: For Smart Name Detection
+import { useAuth } from '../context/AuthContext'; 
 import toast, { Toaster } from 'react-hot-toast'; 
 import { 
   Users, ArrowRight, Trophy, Cat, Heart, HelpCircle, ThumbsUp, ThumbsDown, 
@@ -17,7 +17,7 @@ const GameRoom = () => {
   const [searchParams] = useSearchParams();
   const activeRoomId = params.roomId || params.roomCode; 
   const location = useLocation();
-  const { user } = useAuth(); // ✅ ADDED: Get logged in user
+  const { user } = useAuth(); 
   
   const REACTION_ICONS = {
     cat: <Cat size={24} />,
@@ -35,15 +35,12 @@ const GameRoom = () => {
   const role = location.state?.role; 
   
   // ------------------------------------------------------------------
-  // ✅ SMART NAME LOGIC (Replaces the old const name = ... line)
+  // ✅ SMART NAME LOGIC 
   // ------------------------------------------------------------------
-  // 1. Try State (if typed in home) -> 2. Try Auth (if logged in) -> 3. Empty (Trigger Modal)
   const [playerName, setPlayerName] = useState(location.state?.name || user?.name || "");
-  // Only open modal if we don't have a name AND we are not the host AND not in solo mode
   const [isNameModalOpen, setIsNameModalOpen] = useState(!playerName && !isTeacher && !isSolo); 
   const [hasJoined, setHasJoined] = useState(false);
   
-  // Maintain 'name' variable for compatibility with rest of your code
   const name = playerName; 
   // ------------------------------------------------------------------
 
@@ -171,21 +168,23 @@ const GameRoom = () => {
                setPlayerName(savedName);
           }
       }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); 
 
+  // -------------------------------------------------------
+  // ✅ FIXED SOCKET JOIN LOGIC (Robust Connection)
+  // -------------------------------------------------------
   useEffect(() => {
-    // ✅ SOLO UPDATE: Bypass socket listeners if playing solo
+    // 1. Bypass if Solo
     if (isSolo) return;
 
-    // ✅ SMART NAME CHECK: Stop here if modal is open
+    // 2. Stop if Modal is Open or Already Joined
     if (isNameModalOpen) return;
-    
-    // ✅ PREVENT DOUBLE JOIN: Stop if already joined
     if (hasJoined) return;
 
-    // Wait until we have a name (or are teacher)
+    // 3. Stop if no name and not teacher
     if (!name && !isTeacher) return;
 
+    // 4. Save session for reconnects
     if (!isTeacher && name !== 'Guest') {
         localStorage.setItem("quiz_session", JSON.stringify({
             roomCode: activeRoomId,
@@ -193,10 +192,20 @@ const GameRoom = () => {
         }));
     }
 
-    // ✅ JOIN ROOM (Now uses the specific name from state)
-    socket.emit("join_room", { roomCode: activeRoomId, playerName: isTeacher ? "___HOST___" : name });
-    setHasJoined(true); // Mark as joined so we don't emit again
+    // ✅ FORCE CONNECT IF DISCONNECTED (The Critical Fix)
+    if (!socket.connected) {
+        console.log("🔌 Socket disconnected, forcing connection...");
+        socket.connect();
+    }
 
+    // ✅ JOIN ROOM
+    console.log(`🚀 Emitting Join: Room=${activeRoomId}, Name=${name}`);
+    socket.emit("join_room", { roomCode: activeRoomId, playerName: isTeacher ? "___HOST___" : name });
+    
+    // Mark as joined so we don't spam emit
+    setHasJoined(true); 
+
+    // Listeners
     socket.on("update_players", (list) => setPlayers(list.filter(p => p.name !== "___HOST___").sort((a,b) => b.score - a.score)));
     
     socket.on("new_question", ({ question, topic }) => {
@@ -239,7 +248,6 @@ const GameRoom = () => {
         socket.off("reaction_received");
         stopSound("tick");
     };
-  // ✅ ADDED DEPENDENCIES: name, isNameModalOpen, hasJoined
   }, [activeRoomId, isSolo, name, isNameModalOpen, hasJoined]);
 
   // --- 2. TIMER & LOGIC ---
@@ -814,7 +822,15 @@ const GameRoom = () => {
                             const val = e.target.name.value.trim();
                             if(val) {
                                 setPlayerName(val);
+                                // ✅ FORCE JOIN IMMEDIATELY ON SUBMIT
+                                if (!socket.connected) {
+                                    console.log("🔌 Connecting socket...");
+                                    socket.connect();
+                                }
+                                socket.emit("join_room", { roomCode: activeRoomId, playerName: val });
+                                setHasJoined(true);
                                 setIsNameModalOpen(false);
+                                toast.success("Joining game...");
                             }
                         }}>
                             <input 
