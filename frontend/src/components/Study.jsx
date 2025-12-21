@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
     ArrowLeft, Volume2, VolumeX, FileDown, 
-    RefreshCcw, Award, ChevronRight, AlertCircle 
+    RefreshCcw, Award, ChevronRight, AlertCircle, CheckCircle2, XCircle
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast'; // ✅ Added Toaster
+
 const Study = () => {
-    const { user } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -31,52 +33,26 @@ const Study = () => {
 
     console.log("🔍 Raw Input Data:", rawQuestions);
 
-    // ✅ STEP 1: NORMALIZE DATA (Fix Variable Names)
+    // ✅ STEP 1: NORMALIZE DATA
     const normalizedQuestions = rawQuestions.map(q => {
-        // Fix: Explicitly look for 'questionText' first based on your logs
         const qText = q.questionText || q.question || q.text || "Question Text Missing";
-        
-        // Fix: Look for 'correctAnswer' based on your logs
         const qAnswer = q.correctAnswer || q.answer || "";
-
-        // Fix: Ensure options exist
         const qOptions = Array.isArray(q.options) ? q.options : [];
 
         return {
             question: qText,
             options: qOptions,
             answer: qAnswer,
-            type: q.type || 'unknown' // Keep track of type
+            type: q.type || 'unknown'
         };
     });
-const saveResult = async () => {
-        if (!user || !user.id) return; // Don't save for guests
 
-        try {
-            await fetch('http://localhost:5000/api/results', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: user.id,
-                    quizTitle: originalTitle,
-                    score: score,
-                    totalQuestions: quizData.length
-                })
-            });
-            console.log("✅ Score saved to database!");
-        } catch (error) {
-            console.error("Failed to save score");
-        }
-    };
-    // ✅ STEP 2: STRICT FILTERING (Remove Info/Ending Slides)
-    // We only want to play slides that are MCQ or True/False
+    // ✅ STEP 2: STRICT FILTERING
     const playableQuestions = normalizedQuestions.filter(q => {
-        // Exclude Info and Ending slides
         if (q.type === 'info' || q.type === 'ending' || q.type === 'title') return false;
-
-        // Must have text, options, and an answer to be playable
+        
         const hasText = q.question && q.question !== "Question Text Missing";
-        const hasOptions = q.options.length > 1; // Need at least 2 choices
+        const hasOptions = q.options.length > 1; 
         const hasAnswer = q.answer && q.answer.trim() !== "";
 
         return hasText && hasOptions && hasAnswer;
@@ -89,6 +65,29 @@ const saveResult = async () => {
     
     return () => window.speechSynthesis.cancel();
   }, [location.state]);
+
+  // --- SAVE RESULT FUNCTION ---
+  const saveResult = async () => {
+    if (!user || !user.id) return; // Don't save for guests
+
+    try {
+        await fetch('http://localhost:5000/api/results', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user.id,
+                quizTitle: originalTitle,
+                score: score,
+                totalQuestions: quizData.length
+            })
+        });
+        console.log("✅ Score saved to database!");
+        toast.success("Progress saved!");
+    } catch (error) {
+        console.error("Failed to save score");
+        toast.error("Could not save progress (Offline?)");
+    }
+  };
 
   // --- 🔊 AUDIO ENGINE ---
   const speak = (text) => {
@@ -116,7 +115,7 @@ const saveResult = async () => {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.setTextColor(41, 128, 185);
+    doc.setTextColor(79, 70, 229); // Indigo color
     doc.text(originalTitle, pageWidth / 2, yPos, { align: 'center' });
     yPos += 20;
     doc.setDrawColor(200);
@@ -146,6 +145,7 @@ const saveResult = async () => {
     });
 
     doc.save(`${originalTitle}_Exam.pdf`);
+    toast.success("PDF Downloaded!", { icon: '📄' });
   };
 
   const handleAnswer = (selectedOption) => {
@@ -154,6 +154,9 @@ const saveResult = async () => {
     // Strict match (Trim whitespace)
     if (selectedOption.trim() === currentQ.answer.trim()) {
         setScore(prev => prev + 1);
+        toast.success("Correct!", { duration: 1000, icon: '🎉', position: 'top-center', style: { background: '#10B981', color: '#fff' } });
+    } else {
+        toast.error("Incorrect", { duration: 1000, icon: '❌', position: 'top-center' });
     }
 
     window.speechSynthesis.cancel();
@@ -161,79 +164,91 @@ const saveResult = async () => {
 
     const nextQ = currentIndex + 1;
     if (nextQ < quizData.length) {
-        setCurrentIndex(nextQ);
+        setTimeout(() => setCurrentIndex(nextQ), 300); // Slight delay for feedback
     } else {
         setShowScore(true);
         saveResult();
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-white">Loading Quiz...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+            <div className="w-12 h-12 rounded-full border-4 border-slate-800 border-t-indigo-500 animate-spin"></div>
+            Loading Quiz...
+        </div>
+    </div>
+  );
   
   if (quizData.length === 0) return (
-      <div className="min-h-screen bg-[#09090b] text-white flex flex-col items-center justify-center p-6 text-center">
-          <AlertCircle size={48} className="text-red-500 mb-4"/>
-          <h2 className="text-2xl font-bold mb-2">No Playable Questions Found</h2>
-          <p className="text-gray-400 mb-6 max-w-md">
-            The quiz slides you created (Info, Rules, Ending) are not meant for the Quiz Player mode.
-            <br/><span className="text-xs text-gray-500">Only MCQ and True/False slides are shown here.</span>
-          </p>
-          <button onClick={() => navigate('/profile')} className="px-6 py-3 bg-white/10 rounded-lg hover:bg-white/20">Back to Library</button>
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl max-w-md">
+            <AlertCircle size={64} className="text-indigo-500 mb-6 mx-auto"/>
+            <h2 className="text-2xl font-bold mb-2">No Playable Questions</h2>
+            <p className="text-slate-400 mb-8 leading-relaxed">
+              This quiz seems to only contain Info Slides or Rules. <br/>
+              Add some <strong>Multiple Choice</strong> questions to play!
+            </p>
+            <button onClick={() => navigate('/profile')} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition">
+                Return to Library
+            </button>
+          </div>
       </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white font-sans flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-indigo-500/30">
         
         {/* Background Glows */}
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-        {/* Progress Bar */}
+        {/* Progress Bar (Fixed Top) */}
         {!showScore && (
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-800 z-50">
+            <div className="fixed top-0 left-0 w-full h-1.5 bg-slate-900 z-50">
                 <div 
-                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500 ease-out"
+                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(99,102,241,0.5)]"
                     style={{ width: `${((currentIndex + 1) / quizData.length) * 100}%` }}
                 />
             </div>
         )}
 
         {/* MAIN CARD */}
-        <div className="w-full max-w-3xl bg-[#18181b]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 shadow-2xl relative z-10">
+        <div className="w-full max-w-3xl bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-[2rem] p-6 md:p-10 shadow-2xl relative z-10 transition-all duration-300">
             
-            <div className="flex justify-between items-center mb-8 pb-6 border-b border-white/5">
+            <div className="flex justify-between items-center mb-8 pb-6 border-b border-slate-800">
                 <button 
                     onClick={() => navigate('/profile')} 
-                    className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition"
+                    className="p-2 -ml-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-full transition"
+                    title="Exit Quiz"
                 >
                     <ArrowLeft size={24} />
                 </button>
                 
                 <div className="flex flex-col items-center">
-                    <h1 className="text-lg font-bold tracking-wide text-gray-200 uppercase truncate max-w-[200px]">{originalTitle}</h1>
+                    <h1 className="text-lg font-bold tracking-wide text-white uppercase truncate max-w-[200px]">{originalTitle}</h1>
                     {!showScore && (
-                        <span className="text-xs font-bold text-gray-500 tracking-widest mt-1">
-                            Q{currentIndex + 1} of {quizData.length}
+                        <span className="text-[10px] font-bold text-slate-500 tracking-[0.2em] mt-1 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                            QUESTION {currentIndex + 1} / {quizData.length}
                         </span>
                     )}
                 </div>
 
                 <button 
                     onClick={downloadPDF}
-                    className="p-2 -mr-2 text-blue-400 hover:text-white hover:bg-blue-600 rounded-full transition"
-                    title="Download PDF"
+                    className="p-2 -mr-2 text-indigo-400 hover:text-white hover:bg-indigo-600 rounded-full transition"
+                    title="Download as PDF"
                 >
                     <FileDown size={24}/>
                 </button>
             </div>
 
             {!showScore ? (
-                <div key={currentIndex} className="animate-in slide-in-from-right-8 fade-in duration-300">
+                <div key={currentIndex} className="animate-in fade-in zoom-in-95 duration-300">
                     
                     {/* Question */}
                     <div className="mb-10">
-                        <h2 className="text-2xl md:text-3xl font-bold leading-tight text-white mb-4">
+                        <h2 className="text-2xl md:text-3xl font-bold leading-tight text-white mb-6 drop-shadow-sm">
                             {quizData[currentIndex].question}
                         </h2>
                         
@@ -241,42 +256,50 @@ const saveResult = async () => {
                             onClick={() => speak(quizData[currentIndex].question)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wider transition-all border ${
                                 isSpeaking 
-                                ? "bg-blue-500/20 text-blue-400 border-blue-500/50" 
-                                : "bg-white/5 text-gray-400 border-white/10 hover:border-white/30 hover:text-white"
+                                ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/50 animate-pulse" 
+                                : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-white"
                             }`}
                         >
-                            {isSpeaking ? <VolumeX size={14} className="animate-pulse"/> : <Volume2 size={14}/>}
+                            {isSpeaking ? <VolumeX size={14}/> : <Volume2 size={14}/>}
                             {isSpeaking ? "LISTENING..." : "READ ALOUD"}
                         </button>
                     </div>
 
-                    {/* Options */}
-                    <div className="grid grid-cols-1 gap-3">
+                    {/* Options Grid */}
+                    <div className="grid grid-cols-1 gap-4">
                         {quizData[currentIndex].options.map((option, index) => (
                             <button
                                 key={index}
                                 onClick={() => handleAnswer(option)}
-                                className="group w-full text-left p-5 rounded-xl bg-black/20 border border-white/10 hover:bg-blue-600 hover:border-blue-500 transition-all duration-200 flex items-center justify-between overflow-hidden"
+                                className="group w-full text-left p-5 rounded-2xl bg-slate-950/50 border border-slate-800 hover:bg-indigo-600 hover:border-indigo-500 transition-all duration-200 flex items-center justify-between overflow-hidden shadow-sm hover:shadow-indigo-500/20 active:scale-[0.99]"
                             >
-                                <span className="font-medium text-lg text-gray-300 group-hover:text-white transition">
+                                <span className="font-medium text-lg text-slate-300 group-hover:text-white transition">
                                     {option}
                                 </span>
-                                <span className="p-2 bg-white/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <ChevronRight size={16} className="text-white"/>
-                                </span>
+                                <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center opacity-50 group-hover:opacity-100 group-hover:bg-white/20 group-hover:border-transparent transition">
+                                    <ChevronRight size={16} className="text-slate-400 group-hover:text-white"/>
+                                </div>
                             </button>
                         ))}
                     </div>
                 </div>
             ) : (
-                <div className="text-center py-10 animate-in zoom-in duration-500">
-                    <div className="w-32 h-32 bg-gradient-to-tr from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-[0_0_40px_rgba(234,179,8,0.3)]">
-                        <Award size={64} className="text-white drop-shadow-md"/>
+                <div className="text-center py-12 animate-in zoom-in duration-500">
+                    <div className="relative inline-block mb-10">
+                        <div className="absolute inset-0 bg-yellow-500 blur-3xl opacity-20 rounded-full"></div>
+                        <div className="w-32 h-32 bg-gradient-to-br from-yellow-400 to-orange-600 rounded-full flex items-center justify-center relative shadow-xl border-4 border-slate-900">
+                            <Award size={64} className="text-white drop-shadow-md"/>
+                        </div>
+                        {score === quizData.length && (
+                            <div className="absolute -top-2 -right-6 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full border-2 border-slate-900 transform rotate-12 shadow-lg">
+                                PERFECT!
+                            </div>
+                        )}
                     </div>
                     
-                    <h2 className="text-4xl font-bold text-white mb-2">Quiz Complete!</h2>
-                    <p className="text-gray-400 text-lg mb-8">
-                        You scored <strong className="text-white text-2xl">{score}</strong> out of <strong className="text-white text-2xl">{quizData.length}</strong>
+                    <h2 className="text-4xl font-black text-white mb-3 tracking-tight">Session Complete!</h2>
+                    <p className="text-slate-400 text-lg mb-10">
+                        You scored <strong className="text-white text-2xl mx-1">{score}</strong> out of <strong className="text-white text-2xl mx-1">{quizData.length}</strong>
                     </p>
 
                     <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
@@ -286,13 +309,13 @@ const saveResult = async () => {
                                 setCurrentIndex(0);
                                 setScore(0);
                             }}
-                            className="flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold border border-white/10 transition"
+                            className="flex items-center justify-center gap-2 py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold border border-slate-700 transition"
                         >
                             <RefreshCcw size={18}/> Retry
                         </button>
                         <button 
                             onClick={() => navigate('/profile')}
-                            className="flex items-center justify-center gap-2 py-3 bg-white text-black hover:bg-gray-200 rounded-xl font-bold transition shadow-lg shadow-white/10"
+                            className="flex items-center justify-center gap-2 py-3.5 bg-white text-slate-950 hover:bg-slate-200 rounded-xl font-bold transition shadow-lg shadow-white/10"
                         >
                             Finish
                         </button>

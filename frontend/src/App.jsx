@@ -19,6 +19,7 @@ import FlashcardMode from './components/Study';
 import MathBash from './components/games/MathBash';
 import WordScramble from './components/games/WordScramble';
 import ReportView from './components/ReportView'; // ✅ Import this
+import SoloAI from './components/SoloAI'; //
 // --- TEACHER COMPONENTS (Protected) ---
 import TeacherHub from './components/TeacherHub';
 import AIQuizGenerator from './components/AIQuizGenerator';
@@ -64,6 +65,7 @@ function App() {
           {/* Solo Learning & Mini-Games */}
           <Route path="/solo" element={<SoloHub />} />
           <Route path="/upload-notes" element={<NotesQuiz />} />
+          <Route path="/student/ai" element={<SoloAI />} />
           <Route path="/study" element={<FlashcardMode />} />
           <Route path="/game/math-bash" element={<MathBash />} />
           <Route path="/game/word-scramble" element={<WordScramble />} />

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, User, ArrowRight, AlertCircle } from 'lucide-react';
+import { Lock, Mail, User, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -16,9 +17,13 @@ const Register = () => {
     e.preventDefault();
     setError('');
 
+    // ✅ VALIDATION
     if (!name || !email || !password) {
-      return setError("Please fill in all fields.");
+      toast.error("Please fill in all fields");
+      return setError("All fields are required.");
     }
+
+    const toastId = toast.loading("Creating your account...");
 
     try {
       // 1. Try Real Backend
@@ -36,6 +41,7 @@ const Register = () => {
 
       // Success
       login(data.user);
+      toast.success("Account created successfully!", { id: toastId });
       navigate('/teacher');
 
     } catch (err) {
@@ -44,6 +50,7 @@ const Register = () => {
       // 2. Local Fallback
       const existingUsers = JSON.parse(localStorage.getItem('quizgenie_users_db') || "[]");
       if (existingUsers.some(u => u.email === email)) {
+          toast.error("Account already exists!", { id: toastId });
           return setError("Account already exists! Please login.");
       }
       const newUser = { name, email, password }; 
@@ -51,90 +58,111 @@ const Register = () => {
       localStorage.setItem('quizgenie_users_db', JSON.stringify(existingUsers));
       
       login({ name, email }); 
+      toast.success("Welcome to QuizGenie!", { id: toastId });
       navigate('/teacher');
     }
-  }; // <--- Ensure this is the only closing brace here
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
-      <div className="w-full max-w-md bg-gray-900 border border-gray-800 p-8 rounded-3xl shadow-2xl relative overflow-hidden">
-        
-        {/* Decorative Gradient Blur */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-indigo-500/30">
+      
+      {/* Background Decor */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+         <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-900/20 rounded-full blur-[100px]" />
+         <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[100px]" />
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+      </div>
 
+      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-[2rem] shadow-2xl relative z-10 group transition-all duration-500 hover:shadow-purple-500/10 hover:border-slate-700">
+        
         {/* Error Banner */}
         {error && (
-            <div className="absolute top-0 left-0 w-full bg-red-500/10 text-red-400 text-xs font-bold text-center py-3 flex items-center justify-center gap-2 border-b border-red-500/20 z-20">
+            <div className="absolute top-0 left-0 w-full bg-rose-500/10 text-rose-400 text-xs font-bold text-center py-3 border-b border-rose-500/20 animate-slide-down flex items-center justify-center gap-2">
                 <AlertCircle size={14}/> {error}
             </div>
         )}
 
-        <div className="text-center mb-8 mt-6 relative z-10">
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-2">
+        <div className="text-center mb-8 mt-4">
+          <div className="inline-flex items-center justify-center p-3 bg-slate-800/50 rounded-2xl mb-4 ring-1 ring-white/5 shadow-inner">
+             <Sparkles size={32} className="text-purple-400" />
+          </div>
+          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-400 to-slate-200 tracking-tight mb-2">
             Create Account
           </h1>
-          <p className="text-gray-400 text-sm">Join QuizGenie as a Teacher</p>
+          <p className="text-slate-400 text-sm font-medium">Join the QuizGenie Community</p>
         </div>
 
-        <form onSubmit={handleRegister} className="space-y-6 relative z-10">
+        <form onSubmit={handleRegister} className="space-y-5">
           
           {/* Name Input */}
-          <div>
-            <label htmlFor="name" className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 cursor-pointer">Full Name</label>
-            <div className="relative group">
-              <User className="absolute top-3 left-3 text-gray-500 pointer-events-none group-focus-within:text-blue-500 transition" size={18} />
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 cursor-pointer">Full Name</label>
+            <div className="relative group/input">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-purple-400 transition-colors pointer-events-none">
+                  <User size={18} />
+              </div>
               <input 
                 id="name"
                 type="text" 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-4 pl-12 pr-4 text-white placeholder-slate-600 outline-none transition-all focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 shadow-inner"
                 placeholder="John Doe"
               />
             </div>
           </div>
 
           {/* Email Input */}
-          <div>
-            <label htmlFor="email" className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 cursor-pointer">Email</label>
-            <div className="relative group">
-              <Mail className="absolute top-3 left-3 text-gray-500 pointer-events-none group-focus-within:text-blue-500 transition" size={18} />
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 cursor-pointer">Email Address</label>
+            <div className="relative group/input">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-purple-400 transition-colors pointer-events-none">
+                  <Mail size={18} />
+              </div>
               <input 
                 id="email"
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-4 pl-12 pr-4 text-white placeholder-slate-600 outline-none transition-all focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 shadow-inner"
                 placeholder="teacher@school.com"
               />
             </div>
           </div>
 
           {/* Password Input */}
-          <div>
-            <label htmlFor="password" className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 cursor-pointer">Password</label>
-            <div className="relative group">
-              <Lock className="absolute top-3 left-3 text-gray-500 pointer-events-none group-focus-within:text-blue-500 transition" size={18} />
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 cursor-pointer">Password</label>
+            <div className="relative group/input">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-purple-400 transition-colors pointer-events-none">
+                  <Lock size={18} />
+              </div>
               <input 
                 id="password"
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-4 pl-12 pr-4 text-white placeholder-slate-600 outline-none transition-all focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 shadow-inner"
                 placeholder="••••••••"
               />
             </div>
           </div>
 
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transform active:scale-95">
-            Sign Up <ArrowRight size={18} />
+          <button 
+            type="submit" 
+            className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl transition-all duration-200 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30 flex items-center justify-center gap-2 transform active:scale-[0.98] mt-4 group/btn"
+          >
+            Get Started <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform"/>
           </button>
         </form>
         
-        <div className="mt-6 text-center text-sm relative z-10">
-            <span className="text-gray-500">Already have an account? </span>
-            <Link to="/login" className="text-blue-400 hover:text-blue-300 font-bold transition">Login</Link>
+        <div className="mt-8 text-center text-sm">
+            <span className="text-slate-500">Already have an account? </span>
+            <Link to="/login" className="text-purple-400 hover:text-purple-300 font-bold transition-colors underline decoration-purple-500/30 hover:decoration-purple-500">
+                Sign In
+            </Link>
         </div>
+
       </div>
     </div>
   );

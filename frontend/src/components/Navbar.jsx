@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
     Plus, LogOut, User, MonitorPlay, BrainCircuit, 
-    ChevronDown, LayoutDashboard 
+    ChevronDown, LayoutDashboard, Sparkles 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,8 +28,8 @@ const Navbar = () => {
 
   // --- NAVIGATION HELPERS ---
   const isActive = (path) => location.pathname === path 
-    ? "bg-white/10 text-white border border-white/10" 
-    : "text-gray-400 hover:text-white hover:bg-white/5";
+    ? "bg-indigo-600/10 text-indigo-400 border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.1)]" 
+    : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 border-transparent";
 
   const isWorkspace = ['/teacher', '/create-quiz', '/create-survey', '/game/'].some(path => location.pathname.startsWith(path));
 
@@ -48,48 +48,51 @@ const Navbar = () => {
   };
 
   return (
-   // ✅ FIX: z-[100] ensures this stays on top of EVERYTHING
-   <nav className="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-[100]">
+   // ✅ GLASSMORPHISM HEADER
+   <nav className="bg-slate-950/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-[100] transition-all duration-300">
 
-      <div className="max-w-7xl mx-auto h-full flex justify-between items-center px-6">
+      <div className="max-w-7xl mx-auto h-16 flex justify-between items-center px-6">
         
         {/* LEFT: LOGO */}
-        <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center text-lg shadow-lg group-hover:shadow-purple-500/30 transition-all">
-                🧞‍♂️
+        <Link to="/" className="flex items-center gap-3 group relative">
+            <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center text-lg shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform duration-300 relative z-10">
+                <Sparkles size={18} className="text-white fill-white/20"/>
             </div>
-            <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
+            <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-white tracking-tight relative z-10">
                 QuizGenie
             </span>
         </Link>
 
-        {/* CENTER: LINKS */}
-        <div className="hidden md:flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
-          <Link to="/" className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all duration-200 ${isActive("/")}`}>
-            <MonitorPlay size={16}/> Live Game
+        {/* CENTER: LINKS (Desktop) */}
+        <div className="hidden md:flex items-center gap-1 bg-slate-900/50 p-1.5 rounded-full border border-slate-800/50 backdrop-blur-sm">
+          <Link to="/" className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all duration-300 border ${isActive("/")}`}>
+            <MonitorPlay size={16} className={location.pathname === "/" ? "fill-current" : ""}/> Live Game
           </Link>
-          <Link to="/solo" className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all duration-200 ${isActive("/solo")}`}>
-            <BrainCircuit size={16}/> Solo Learn
+          <Link to="/solo" className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all duration-300 border ${isActive("/solo")}`}>
+            <BrainCircuit size={16} className={location.pathname === "/solo" ? "fill-current" : ""}/> Solo Learn
           </Link>
         </div>
 
         {/* RIGHT: ACTIONS */}
         <div className="flex items-center gap-4">
             
-            {/* CREATE ROOM BUTTON */}
+            {/* CREATE ROOM BUTTON (Gradient Shine) */}
             {!isWorkspace && (
                 <button 
                     onClick={handleCreateRoom} 
-                    className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-purple-900/20 transition-all transform hover:scale-105 active:scale-95"
+                    className="hidden sm:flex group relative px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all overflow-hidden"
                 >
-                    <Plus size={18} />
-                    <span>Create Room</span>
+                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></div>
+                    <span className="relative flex items-center gap-2">
+                        <Plus size={16} strokeWidth={3} /> Host Session
+                    </span>
                 </button>
             )}
 
             {user ? (
                 /* --- LOGGED IN USER DROPDOWN --- */
-                <div className="relative pl-3 border-l border-gray-700" ref={dropdownRef}>
+                <div className="relative pl-4 border-l border-slate-800 ml-2" ref={dropdownRef}>
                     
                     {/* TRIGGER BUTTON */}
                     <button 
@@ -97,48 +100,52 @@ const Navbar = () => {
                         className="flex items-center gap-3 group focus:outline-none"
                     >
                         <div className="flex flex-col text-right hidden lg:flex">
-                            <span className="text-sm font-bold text-white leading-none group-hover:text-blue-400 transition">
+                            <span className="text-sm font-bold text-slate-200 leading-none group-hover:text-indigo-400 transition-colors">
                                 {user.name}
                             </span>
-                            {/* CLEAN "TEACHER" LABEL (No Levels) */}
-                            <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mt-0.5">
                                 Teacher
                             </span>
                         </div>
                         
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-sm font-bold text-white shadow-lg ring-2 ring-transparent group-hover:ring-blue-500/50 transition-all">
-                            {user.name.charAt(0).toUpperCase()}
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 p-[2px] shadow-inner group-hover:shadow-indigo-500/20 transition-all duration-300">
+                            <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center text-sm font-bold text-indigo-400">
+                                {user.name.charAt(0).toUpperCase()}
+                            </div>
                         </div>
 
-                        <ChevronDown size={16} className={`text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}/>
+                        <ChevronDown size={14} className={`text-slate-600 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-indigo-400' : ''}`}/>
                     </button>
 
                     {/* DROPDOWN MENU */}
                     {isDropdownOpen && (
-                        <div className="absolute right-0 mt-3 w-56 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl py-2 z-50 animate-fade-in-up origin-top-right overflow-hidden">
+                        <div className="absolute right-0 mt-4 w-60 bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl py-2 z-50 animate-fade-in-up origin-top-right overflow-hidden ring-1 ring-white/5">
                             
-                            {/* MOBILE HEADER (Only visible on small screens) */}
-                            <div className="px-4 py-3 border-b border-white/5 lg:hidden">
-                                <p className="text-white font-bold truncate">{user.name}</p>
-                                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                            {/* MOBILE HEADER */}
+                            <div className="px-5 py-4 border-b border-slate-800 lg:hidden bg-slate-950/30">
+                                <p className="text-white font-bold truncate text-base">{user.name}</p>
+                                <p className="text-xs text-slate-500 truncate">{user.email}</p>
                             </div>
 
                             {/* LINKS */}
-                            <div className="p-1.5 space-y-1">
-                                <button onClick={() => { navigate('/profile'); setIsDropdownOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-3 transition">
-                                    <User size={16} className="text-blue-500"/> My Profile
+                            <div className="p-2 space-y-1">
+                                <button onClick={() => { navigate('/profile'); setIsDropdownOpen(false); }} className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl flex items-center gap-3 transition-colors group">
+                                    <div className="p-1.5 bg-slate-800 rounded-lg group-hover:bg-indigo-500/20 transition-colors"><User size={16} className="text-indigo-400"/></div> 
+                                    My Profile
                                 </button>
                                 
-                                <button onClick={() => { navigate('/teacher'); setIsDropdownOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-3 transition">
-                                    <LayoutDashboard size={16} className="text-purple-500"/> Dashboard
+                                <button onClick={() => { navigate('/teacher'); setIsDropdownOpen(false); }} className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl flex items-center gap-3 transition-colors group">
+                                    <div className="p-1.5 bg-slate-800 rounded-lg group-hover:bg-purple-500/20 transition-colors"><LayoutDashboard size={16} className="text-purple-400"/></div>
+                                    Dashboard
                                 </button>
                             </div>
 
-                            <div className="h-px bg-white/10 my-1 mx-2"></div>
+                            <div className="h-px bg-slate-800 my-1 mx-4"></div>
 
-                            <div className="p-1.5">
-                                <button onClick={handleLogout} className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg flex items-center gap-3 transition">
-                                    <LogOut size={16}/> Sign Out
+                            <div className="p-2">
+                                <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl flex items-center gap-3 transition-colors group">
+                                    <div className="p-1.5 bg-rose-500/10 rounded-lg group-hover:bg-rose-500/20 transition-colors"><LogOut size={16}/></div>
+                                    Sign Out
                                 </button>
                             </div>
                         </div>
@@ -146,11 +153,11 @@ const Navbar = () => {
                 </div>
             ) : (
                 /* --- GUEST VIEW --- */
-                <div className="flex items-center gap-2">
-                    <Link to="/login" className="text-sm font-bold text-gray-400 hover:text-white transition px-3 py-2">
+                <div className="flex items-center gap-3">
+                    <Link to="/login" className="text-sm font-bold text-slate-400 hover:text-white transition px-4 py-2 hover:bg-slate-800/50 rounded-full">
                         Log in
                     </Link>
-                    <Link to="/register" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition">
+                    <Link to="/register" className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-full text-sm font-bold transition shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40">
                         Sign Up
                     </Link>
                 </div>

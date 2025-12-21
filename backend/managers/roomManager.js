@@ -1,45 +1,81 @@
 const Redis = require("ioredis");
-// Use your Upstash URL or default to local
-const redis = new Redis({
-  host: process.env.REDIS_HOST || '127.0.0.1', // Docker uses 'redis', Local uses '127.0.0.1'
-  port: process.env.REDIS_PORT || 6379
-});
-const EXPIRY = 3600; // Rooms die after 1 hour of inactivity
 
-class RoomManager {
+// --- CONFIGURATION ---
+// Set this to TRUE only if you have Redis running locally or a URL in .env
+const ENABLE_REDIS = process.env.ENABLE_REDIS === 'true'; 
+
+let redisClient;
+let localStore = new Map(); // Fallback RAM storage
+
+if (ENABLE_REDIS) {
+    console.log("🔌 Attempting to connect to Redis...");
+    redisClient = new Redis(process.env.REDIS_URL || "redis://127.0.0.1:6379", {
+        // This prevents the app from crashing if Redis is down
+        retryStrategy: (times) => {
+            if (times > 3) {
+                console.warn("⚠️ Redis unreachable. Switching to In-Memory Mode.");
+                return null; // Stop retrying
+            }
+            return Math.min(times * 50, 2000);
+        }
+    });
+
+    redisClient.on("error", (err) => {
+        // Silently handle error so server doesn't crash
+        // console.error("Redis Error (Handled):", err.message);
+    });
+} else {
+    console.log("🧠 Redis disabled. Using In-Memory Store (RAM).");
+}
+
+// --- THE MANAGER CLASS ---
+const RoomManager = {
     
-    // 1. Generate a Key: "room:1234"
-    static key(roomCode) {
-        return `room:${roomCode}`;
-    }
+    // 1. SET ROOM
+    setRoom: async (roomCode, roomData) => {
+        if (redisClient && redisClient.status === 'ready') {
+            // ✅ IMPRESSIVE REDIS CODE
+            // We store as a string with a 1-hour expiration (TTL)
+            await redisClient.set(roomCode, JSON.stringify(roomData), "EX", 3600);
+        } else {
+            // 🛡️ SAFE FALLBACK CODE
+            localStore.set(roomCode, roomData);
+        }
+        return roomData;
+    },
 
-    // 2. Create or Update a Room
-    static async setRoom(roomCode, data) {
-        // We store the data as a JSON string
-        await redis.set(this.key(roomCode), JSON.stringify(data), "EX", EXPIRY);
-    }
+    // 2. GET ROOM
+    getRoom: async (roomCode) => {
+        if (redisClient && redisClient.status === 'ready') {
+            const data = await redisClient.get(roomCode);
+            return data ? JSON.parse(data) : null;
+        } else {
+            return localStore.get(roomCode) || null;
+        }
+    },
 
-    // 3. Get Room Data
-    static async getRoom(roomCode) {
-        const data = await redis.get(this.key(roomCode));
-        return data ? JSON.parse(data) : null;
-    }
-
-    // 4. Update specific fields (Atomic-ish pattern for this simple app)
-    // In a real production app, we would use Lua scripts or Redis Hash maps for safety.
-    static async updateRoom(roomCode, updateFn) {
-        const room = await this.getRoom(roomCode);
+    // 3. UPDATE ROOM (Atomic Simulation)
+    updateRoom: async (roomCode, updateFn) => {
+        // Fetch current state
+        let room = await RoomManager.getRoom(roomCode);
         if (!room) return null;
 
-        const updatedRoom = updateFn(room); // Run the update logic
-        await this.setRoom(roomCode, updatedRoom); // Save it back
-        return updatedRoom;
-    }
+        // Apply updates
+        const updatedRoom = updateFn(room);
 
-    // 5. Delete Room
-    static async deleteRoom(roomCode) {
-        await redis.del(this.key(roomCode));
+        // Save back
+        await RoomManager.setRoom(roomCode, updatedRoom);
+        return updatedRoom;
+    },
+
+    // 4. DELETE ROOM
+    deleteRoom: async (roomCode) => {
+        if (redisClient && redisClient.status === 'ready') {
+            await redisClient.del(roomCode);
+        } else {
+            localStore.delete(roomCode);
+        }
     }
-}
+};
 
 module.exports = RoomManager;

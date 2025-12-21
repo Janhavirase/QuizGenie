@@ -11,11 +11,12 @@ const User = require('./models/User'); // ✅ Ensure User model is imported
 const RoomManager = require('./managers/roomManager'); // ✅ Import Redis Manager
 // ✅ NEW SECURITY IMPORTS
 const helmet = require('helmet');
+
 //const xss = require('xss-clean');
-const mongoSanitize = require('express-mongo-sanitize');
 const { globalLimiter, authLimiter } = require('./middleware.js/security');
 const app = express();
-
+// Disable the "X-Powered-By" header
+app.disable('x-powered-by');
 // 🔧 FIX: Unlock 'req.query' so mongoSanitize doesn't crash
 // app.use((req, res, next) => {
 //     // Check if the query property is read-only (which causes the crash)
@@ -33,8 +34,26 @@ const app = express();
 // });
 
 // JSON Parser
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '10mb' }));
+// ✅ CUSTOM SECURITY MIDDLEWARE (No Library Needed)
+// This function cleans inputs to prevent NoSQL Injection
+app.use((req, res, next) => {
+  const sanitize = (obj) => {
+    for (let key in obj) {
+      if (key.startsWith('$')) {
+        delete obj[key]; // Remove dangerous keys like $gt, $where
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        sanitize(obj[key]); // Recursively clean nested objects
+      }
+    }
+  };
 
+  if (req.body) sanitize(req.body);
+  if (req.query) sanitize(req.query);
+  if (req.params) sanitize(req.params);
+
+  next();
+});
 // Now this will work safely
 // app.use(mongoSanitize());
 const server = http.createServer(app); 

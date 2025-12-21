@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Sparkles, BrainCircuit, Target, Layers, FileText, ArrowLeft } from 'lucide-react';
-import { toast } from 'react-hot-toast'; // <--- ADD THIS
+import { toast } from 'react-hot-toast'; 
+
 const AIQuizGenerator = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -11,33 +12,62 @@ const AIQuizGenerator = () => {
   const [formData, setFormData] = useState({
     topic: "",
     amount: 5,
-    difficulty: "Medium",
-    purpose: "Assessment", // e.g., Summary, Team Event, Test
-    type: "Multiple Choice" // MCQ, Mixed, etc.
+    difficulty: "Medium", // Keep as "Medium" for UI, we convert to lowercase later
+    purpose: "Assessment", 
+    type: "Multiple Choice" 
   });
 
   const handleGenerate = async () => {
     if (!formData.topic.trim()) return toast.error("Please enter a topic first!");
     
     setLoading(true);
-const toastId = toast.loading("🤖 AI is brainstorming your quiz...");
+    const toastId = toast.loading("🤖 AI is brainstorming your quiz...");
+    
     try {
-        // 1. Prepare Prompt Context for the AI
-        // We append context to the topic so the AI understands the vibe without changing backend logic
+        // 1. Prepare Prompt Context
         const enhancedTopic = `${formData.topic} (Context: ${formData.purpose}, Style: ${formData.type})`;
 
-        // 2. Call API
+        // 2. Call API (✅ FIXED PAYLOAD)
         const res = await axios.post('http://localhost:5000/api/ai/generate', { 
             topic: enhancedTopic, 
-            difficulty: formData.difficulty, 
-            amount: parseInt(formData.amount) 
+            difficulty: formData.difficulty.toLowerCase(), 
+            count: parseInt(formData.amount) 
         });
 
         if (res.data.success) {
             const aiQuestions = res.data.data;
 
+            // ---------------------------------------------------------
+            // ✅ NEW: SAVE TO LIBRARY (LocalStorage) for Teacher Hub
+            // ---------------------------------------------------------
+            const generatedId = Date.now().toString(); // Create unique ID
+            
+            const newQuiz = {
+                id: generatedId,
+                title: formData.topic,
+                description: `${formData.difficulty} level ${formData.purpose}`,
+                questions: aiQuestions.map((q, i) => ({
+                    id: i + 1,
+                    question: q.questionText,
+                    options: q.options,
+                    correctAnswer: q.correctAnswer,
+                    timeLimit: 20,
+                    type: 'mcq'
+                })),
+                createdAt: new Date().toISOString(),
+                stats: { plays: 0, avgScore: 0 }
+            };
+
+            // Get existing quizzes, add new one to top, save back
+            const existingQuizzes = JSON.parse(localStorage.getItem('quizgenie_quizzes') || "[]");
+            localStorage.setItem('quizgenie_quizzes', JSON.stringify([newQuiz, ...existingQuizzes]));
+            
+            console.log("✅ Quiz Saved to Teacher Hub:", newQuiz);
+            // ---------------------------------------------------------
+
             // 3. GENERATE FIXED SLIDES
             toast.success("Quiz generated successfully!", { id: toastId });
+            
             // Slide 1: Dynamic Title Screen
             const slideTitle = {
                 id: 1,
@@ -77,19 +107,22 @@ const toastId = toast.loading("🤖 AI is brainstorming your quiz...");
                 textColor: '#ffffff',
                 visualization: 'bar',
                 showPercentage: true,
-                reactions: ['like', 'love', 'cat'] // Default reactions
+                reactions: ['like', 'love', 'cat'] 
             }));
 
             // 5. Navigate to Editor
             const fullTemplate = {
+                id: generatedId, // Pass ID so Editor knows it's saved
+                title: formData.topic,
                 slides: [slideTitle, slideRules, ...questionSlides]
             };
 
             navigate('/create-survey', { state: { template: fullTemplate } });
         }
     } catch (error) {
-        console.error(error);
-        toast.error("AI failed to generate. Try a simpler topic.", { id: toastId });
+        console.error("AI Gen Error:", error);
+        const msg = error.response?.data?.message || "AI failed to generate. Try a simpler topic.";
+        toast.error(msg, { id: toastId });
     } finally {
         setLoading(false);
     }

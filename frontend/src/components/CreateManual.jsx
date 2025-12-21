@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, Trash2, Save, ArrowLeft, CheckCircle, Clock, Type, Play, 
-  Layout, Palette, AlignLeft, AlignCenter, MoreHorizontal, Settings
+  Layout, Palette, AlignLeft, AlignCenter, MoreHorizontal, Settings,
+  Layers, Image as ImageIcon, Copy
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -16,7 +17,7 @@ const CreateManual = () => {
   const [activeSlide, setActiveSlide] = useState(0);
   const [showAddMenu, setShowAddMenu] = useState(false);
 
-  // ✅ PROFESSIONAL TEMPLATES (No Ugly Green)
+  // ✅ PROFESSIONAL TEMPLATES
   const TEMPLATES = {
     mcq: { 
         type: 'mcq', 
@@ -24,7 +25,7 @@ const CreateManual = () => {
         options: ["", "", "", ""], 
         correctAnswer: "", 
         timeLimit: 20, 
-        style: { bgColor: '#18181b', textColor: '#ffffff', fontSize: 'text-4xl', layout: 'centered' } 
+        style: { bgColor: '#0f172a', textColor: '#f8fafc', fontSize: 'text-4xl', layout: 'centered' } 
     },
     tf: { 
         type: 'tf', 
@@ -32,14 +33,14 @@ const CreateManual = () => {
         options: ["True", "False"], 
         correctAnswer: "", 
         timeLimit: 15, 
-        style: { bgColor: '#1e1b4b', textColor: '#ffffff', fontSize: 'text-4xl', layout: 'centered' } 
+        style: { bgColor: '#1e1b4b', textColor: '#f8fafc', fontSize: 'text-4xl', layout: 'centered' } 
     },
     info: { 
         type: 'info', 
         questionText: "Did You Know?", 
         options: ["Enter your information here..."], 
         timeLimit: 0, 
-        style: { bgColor: '#000000', textColor: '#ffffff', fontSize: 'text-5xl', layout: 'centered' } 
+        style: { bgColor: '#000000', textColor: '#f8fafc', fontSize: 'text-5xl', layout: 'centered' } 
     },
     ending: { 
         type: 'ending', 
@@ -63,14 +64,17 @@ const CreateManual = () => {
     setSlides(newSlides);
     setActiveSlide(activeSlide + 1);
     setShowAddMenu(false);
+    toast.success("New slide added", { icon: '✨' });
   };
 
   const deleteSlide = (e, index) => {
     e.stopPropagation();
     if (slides.length === 1) return toast.error("Project must have at least one slide!");
+    
     const newSlides = slides.filter((_, i) => i !== index);
     setSlides(newSlides);
     if (activeSlide >= newSlides.length) setActiveSlide(newSlides.length - 1);
+    toast("Slide deleted", { icon: '🗑️' });
   };
 
   const updateSlideContent = (field, value) => {
@@ -93,17 +97,16 @@ const CreateManual = () => {
 
   const setCorrect = (val) => {
     updateSlideContent('correctAnswer', val);
+    toast.success("Answer set!", { duration: 1000 });
   };
 
   // --- HELPERS ---
 
-  // ✅ SMART NUMBERING: Don't count Info/Ending as "Questions"
   const getSlideLabel = (index) => {
     const s = slides[index];
-    if (s.type === 'info') return 'ℹ️ Info';
-    if (s.type === 'ending') return '🏁 End';
+    if (s.type === 'info') return 'Info';
+    if (s.type === 'ending') return 'End';
     
-    // Count how many actual questions appear before this one
     let qCount = 0;
     for(let i=0; i<=index; i++) {
         if(slides[i].type === 'mcq' || slides[i].type === 'tf') qCount++;
@@ -120,7 +123,6 @@ const CreateManual = () => {
         const s = slides[i];
         if (!s.questionText.trim()) { toast.error(`Slide ${i+1}: Missing main text`); return false; }
         
-        // Only validate answers for actual Questions
         if (s.type === 'mcq' || s.type === 'tf') {
             if (!s.correctAnswer) { toast.error(`Slide ${i+1}: Select a correct answer`); return false; }
             if (s.options.some(o => !o.trim())) { toast.error(`Slide ${i+1}: Fill all options`); return false; }
@@ -137,6 +139,9 @@ const CreateManual = () => {
 
   const handleSave = () => {
     if (!validateProject()) return;
+    
+    const saveToast = toast.loading("Saving project...");
+    
     const newQuiz = {
         id: Math.random().toString(36).substr(2, 9),
         title,
@@ -146,36 +151,40 @@ const CreateManual = () => {
     };
     const existing = JSON.parse(localStorage.getItem('quizgenie_quizzes') || "[]");
     localStorage.setItem('quizgenie_quizzes', JSON.stringify([...existing, newQuiz]));
-    toast.success("Project Saved!");
-    navigate('/teacher');
+    
+    toast.success("Project Saved!", { id: saveToast });
+    setTimeout(() => navigate('/teacher'), 1000);
   };
 
   const current = slides[activeSlide];
 
   return (
-    <div className="h-screen bg-[#09090b] text-white flex flex-col font-sans overflow-hidden">
+    <div className="h-screen bg-slate-950 text-slate-200 flex flex-col font-sans overflow-hidden selection:bg-indigo-500/30">
       
       {/* 1. STUDIO HEADER */}
-      <div className="h-14 border-b border-white/5 flex items-center justify-between px-4 bg-[#09090b] z-50">
+      <div className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur-md z-50">
         <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/solo')} className="p-2 hover:bg-white/10 rounded-lg transition text-gray-400 hover:text-white">
-                <ArrowLeft size={18}/>
+            <button onClick={() => navigate('/teacher')} className="p-2 hover:bg-slate-800 rounded-xl transition text-slate-400 hover:text-white">
+                <ArrowLeft size={20}/>
             </button>
-            <div className="h-6 w-px bg-white/10"></div>
-            <input 
-                value={title} 
-                onChange={(e) => setTitle(e.target.value)}
-                className="bg-transparent text-sm font-bold focus:outline-none focus:bg-white/5 px-2 py-1 rounded w-64 text-gray-200"
-                placeholder="Untitled Project..."
-            />
+            <div className="h-8 w-px bg-slate-800"></div>
+            <div className="group flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider group-hover:text-indigo-400 transition-colors">Project Name</span>
+                <input 
+                    value={title} 
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="bg-transparent text-lg font-bold focus:outline-none text-white placeholder-slate-600"
+                    placeholder="Untitled Project..."
+                />
+            </div>
         </div>
 
-        <div className="flex items-center gap-2">
-            <button onClick={handlePlayNow} className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-1.5 rounded-md text-sm font-bold transition">
-                <Play size={14} fill="currentColor" /> Preview
+        <div className="flex items-center gap-3">
+            <button onClick={handlePlayNow} className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-xl text-sm font-bold transition border border-slate-700">
+                <Play size={16} fill="currentColor" /> Preview
             </button>
-            <button onClick={handleSave} className="flex items-center gap-2 bg-white text-black hover:bg-gray-200 px-4 py-1.5 rounded-md text-sm font-bold transition">
-                <Save size={14}/> Save
+            <button onClick={handleSave} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition shadow-lg shadow-indigo-500/20">
+                <Save size={18}/> Save Project
             </button>
         </div>
       </div>
@@ -183,65 +192,75 @@ const CreateManual = () => {
       <div className="flex flex-1 overflow-hidden">
         
         {/* 2. SIDEBAR (Filmstrip) */}
-        <div className="w-56 bg-[#09090b] border-r border-white/5 flex flex-col">
-            <div className="p-3 text-xs font-bold text-gray-500 uppercase tracking-widest">Slides</div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-3 space-y-3">
+        <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+            <div className="p-4 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Timeline</span>
+                <span className="text-xs font-bold text-slate-600 bg-slate-800 px-2 py-0.5 rounded-md">{slides.length} Slides</span>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4 space-y-4">
                 {slides.map((s, i) => (
                     <div 
                         key={s.id} 
                         onClick={() => setActiveSlide(i)}
-                        className={`group relative aspect-video rounded-lg cursor-pointer border transition-all duration-200 flex flex-col ${
+                        className={`group relative aspect-video rounded-xl cursor-pointer transition-all duration-200 flex flex-col shadow-sm ${
                             activeSlide === i 
-                            ? 'border-blue-500 ring-1 ring-blue-500/50' 
-                            : 'border-white/10 hover:border-white/30'
+                            ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900 scale-[1.02]' 
+                            : 'opacity-60 hover:opacity-100 hover:scale-[1.02]'
                         }`}
-                        style={{ backgroundColor: s.style?.bgColor || '#18181b' }}
+                        style={{ backgroundColor: s.style?.bgColor || '#1e293b' }}
                     >
-                        {/* Slide Number / Label */}
-                        <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-white/80 z-10">
+                        {/* Slide Number Tag */}
+                        <div className="absolute top-2 left-2 bg-black/40 backdrop-blur-md px-2 py-1 rounded-md text-[10px] font-bold text-white/90 z-10 border border-white/10 flex items-center gap-1">
+                            {s.type === 'info' && <Type size={8} />}
+                            {s.type === 'ending' && <CheckCircle size={8} />}
+                            {(s.type === 'mcq' || s.type === 'tf') && <Layers size={8} />}
                             {getSlideLabel(i)}
                         </div>
                         
                         {/* Mini Preview */}
                         <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-                            <div className="text-[6px] text-white/50 text-center leading-tight">
+                            <div className="text-[6px] text-white/70 text-center leading-tight line-clamp-3 w-full">
                                 {s.questionText || "Empty Slide"}
                             </div>
                         </div>
 
-                        {/* Delete Button */}
-                        <button 
-                            onClick={(e) => deleteSlide(e, i)}
-                            className="absolute top-1 right-1 p-1 rounded hover:bg-red-500/80 hover:text-white text-transparent group-hover:text-gray-400 transition"
-                        >
-                            <Trash2 size={12}/>
-                        </button>
+                        {/* Hover Actions */}
+                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={(e) => deleteSlide(e, i)}
+                                className="p-1.5 rounded-lg bg-rose-500/90 text-white hover:bg-rose-600 shadow-sm"
+                            >
+                                <Trash2 size={12}/>
+                            </button>
+                        </div>
                     </div>
                 ))}
             </div>
             
-            <div className="p-3 border-t border-white/5 bg-[#09090b]">
+            <div className="p-4 border-t border-slate-800 bg-slate-900">
                 <button 
                     onClick={() => setShowAddMenu(!showAddMenu)}
-                    className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
+                    className={`w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition ${showAddMenu ? 'bg-indigo-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
                 >
-                    <Plus size={16}/> Add Slide
+                    <Plus size={18}/> {showAddMenu ? 'Close Menu' : 'Add Slide'}
                 </button>
                 
                 {/* Add Menu Dropdown */}
                 {showAddMenu && (
-                    <div className="absolute bottom-16 left-3 w-48 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in-up">
-                        <button onClick={() => addNewSlide('mcq')} className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-3 text-sm text-gray-300">
-                            <Layout size={14} className="text-blue-400"/> Quiz (MCQ)
+                    <div className="absolute bottom-20 left-4 w-56 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-50 animate-fade-in-up p-2 space-y-1">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-2">Select Template</div>
+                        <button onClick={() => addNewSlide('mcq')} className="w-full text-left px-3 py-2.5 hover:bg-slate-700 rounded-lg flex items-center gap-3 text-sm text-slate-200 transition">
+                            <div className="p-1.5 bg-blue-500/20 rounded-md"><Layout size={14} className="text-blue-400"/></div> Quiz (MCQ)
                         </button>
-                        <button onClick={() => addNewSlide('tf')} className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-3 text-sm text-gray-300">
-                            <CheckCircle size={14} className="text-purple-400"/> True/False
+                        <button onClick={() => addNewSlide('tf')} className="w-full text-left px-3 py-2.5 hover:bg-slate-700 rounded-lg flex items-center gap-3 text-sm text-slate-200 transition">
+                            <div className="p-1.5 bg-purple-500/20 rounded-md"><CheckCircle size={14} className="text-purple-400"/></div> True/False
                         </button>
-                        <button onClick={() => addNewSlide('info')} className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-3 text-sm text-gray-300">
-                            <Type size={14} className="text-green-400"/> Info Slide
+                        <button onClick={() => addNewSlide('info')} className="w-full text-left px-3 py-2.5 hover:bg-slate-700 rounded-lg flex items-center gap-3 text-sm text-slate-200 transition">
+                            <div className="p-1.5 bg-emerald-500/20 rounded-md"><Type size={14} className="text-emerald-400"/></div> Info Slide
                         </button>
-                        <button onClick={() => addNewSlide('ending')} className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-3 text-sm text-gray-300">
-                            <Settings size={14} className="text-yellow-400"/> Ending
+                        <button onClick={() => addNewSlide('ending')} className="w-full text-left px-3 py-2.5 hover:bg-slate-700 rounded-lg flex items-center gap-3 text-sm text-slate-200 transition">
+                            <div className="p-1.5 bg-yellow-500/20 rounded-md"><Settings size={14} className="text-yellow-400"/></div> Ending
                         </button>
                     </div>
                 )}
@@ -249,112 +268,123 @@ const CreateManual = () => {
         </div>
 
         {/* 3. CENTER CANVAS & TOOLBAR */}
-        <div className="flex-1 flex flex-col relative bg-[#121212]">
+        <div className="flex-1 flex flex-col relative bg-[#0f172a] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:20px_20px]">
             
             {/* TOOLBAR */}
-            <div className="h-12 bg-[#09090b] border-b border-white/5 flex items-center justify-center gap-6 px-4">
+            <div className="h-16 bg-slate-900/80 backdrop-blur-sm border-b border-slate-800 flex items-center justify-between px-8">
                 
                 {/* Style Tools */}
-                <div className="flex items-center gap-3 bg-white/5 px-3 py-1 rounded-lg border border-white/5">
-                    <div className="flex items-center gap-2 cursor-pointer group relative">
-                        <Palette size={14} className="text-gray-400"/>
-                        <input 
-                            type="color" 
-                            value={current.style?.bgColor || '#000000'}
-                            onChange={(e) => updateStyle('bgColor', e.target.value)}
-                            className="w-4 h-4 rounded-full border-none p-0 bg-transparent cursor-pointer"
-                        />
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                        <div className="flex items-center gap-2 cursor-pointer group relative">
+                            <Palette size={16} className="text-indigo-400"/>
+                            <span className="text-xs font-medium text-slate-400">Background</span>
+                            <input 
+                                type="color" 
+                                value={current.style?.bgColor || '#000000'}
+                                onChange={(e) => updateStyle('bgColor', e.target.value)}
+                                className="w-6 h-6 rounded-md border-none p-0 bg-transparent cursor-pointer ml-1"
+                            />
+                        </div>
+                        <div className="w-px h-4 bg-slate-700 mx-2"></div>
+                        <div className="flex items-center gap-2 cursor-pointer relative">
+                            <Type size={16} className="text-indigo-400"/>
+                            <span className="text-xs font-medium text-slate-400">Text</span>
+                            <input 
+                                type="color" 
+                                value={current.style?.textColor || '#ffffff'}
+                                onChange={(e) => updateStyle('textColor', e.target.value)}
+                                className="w-6 h-6 rounded-md border-none p-0 bg-transparent cursor-pointer ml-1"
+                            />
+                        </div>
                     </div>
-                    <div className="w-px h-4 bg-white/10"></div>
-                    <div className="flex items-center gap-2 cursor-pointer relative">
-                        <Type size={14} className="text-gray-400"/>
-                        <input 
-                            type="color" 
-                            value={current.style?.textColor || '#ffffff'}
-                            onChange={(e) => updateStyle('textColor', e.target.value)}
-                            className="w-4 h-4 rounded-full border-none p-0 bg-transparent cursor-pointer"
-                        />
-                    </div>
-                </div>
 
-                {/* Typography & Layout */}
-                <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
-                    <select 
-                        value={current.style?.fontSize}
-                        onChange={(e) => updateStyle('fontSize', e.target.value)}
-                        className="bg-transparent text-xs font-medium text-gray-300 focus:outline-none"
-                    >
-                        <option value="text-2xl">Small</option>
-                        <option value="text-4xl">Medium</option>
-                        <option value="text-6xl">Large</option>
-                        <option value="text-8xl">Huge</option>
-                    </select>
-                    <div className="w-px h-4 bg-white/10 mx-2"></div>
-                    <button onClick={() => updateStyle('layout', 'left')} className={`p-1 rounded ${current.style?.layout === 'left' ? 'bg-white/20 text-white' : 'text-gray-500'}`}><AlignLeft size={14}/></button>
-                    <button onClick={() => updateStyle('layout', 'centered')} className={`p-1 rounded ${current.style?.layout === 'centered' ? 'bg-white/20 text-white' : 'text-gray-500'}`}><AlignCenter size={14}/></button>
+                    {/* Typography & Layout */}
+                    <div className="flex items-center gap-1 bg-slate-800 px-2 py-1.5 rounded-lg border border-slate-700">
+                        <select 
+                            value={current.style?.fontSize}
+                            onChange={(e) => updateStyle('fontSize', e.target.value)}
+                            className="bg-transparent text-xs font-medium text-slate-300 focus:outline-none px-2 py-1 rounded hover:bg-slate-700 cursor-pointer"
+                        >
+                            <option value="text-2xl">Small Text</option>
+                            <option value="text-4xl">Medium Text</option>
+                            <option value="text-6xl">Large Text</option>
+                            <option value="text-8xl">Huge Text</option>
+                        </select>
+                        <div className="w-px h-4 bg-slate-700 mx-2"></div>
+                        <button onClick={() => updateStyle('layout', 'left')} className={`p-1.5 rounded-md transition ${current.style?.layout === 'left' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}><AlignLeft size={16}/></button>
+                        <button onClick={() => updateStyle('layout', 'centered')} className={`p-1.5 rounded-md transition ${current.style?.layout === 'centered' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}><AlignCenter size={16}/></button>
+                    </div>
                 </div>
 
                 {/* Timer (Only for Questions) */}
                 {(current.type === 'mcq' || current.type === 'tf') && (
-                    <div className="flex items-center gap-2 bg-blue-900/20 px-3 py-1 rounded-lg border border-blue-500/30 text-blue-400">
-                        <Clock size={14}/>
+                    <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-lg border border-indigo-500/20 text-indigo-400">
+                        <Clock size={16}/>
+                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">Timer:</span>
                         <select 
                             value={current.timeLimit}
                             onChange={(e) => updateSlideContent('timeLimit', Number(e.target.value))}
-                            className="bg-transparent text-xs font-bold focus:outline-none text-blue-400"
+                            className="bg-transparent text-sm font-bold focus:outline-none text-indigo-400 cursor-pointer"
                         >
-                            <option value={10}>10s</option>
-                            <option value={20}>20s</option>
-                            <option value={30}>30s</option>
-                            <option value={60}>60s</option>
+                            <option value={10}>10 Seconds</option>
+                            <option value={20}>20 Seconds</option>
+                            <option value={30}>30 Seconds</option>
+                            <option value={60}>60 Seconds</option>
                         </select>
                     </div>
                 )}
             </div>
 
             {/* CANVAS WRAPPER */}
-            <div className="flex-1 flex items-center justify-center p-8 bg-grid-white/[0.02]">
+            <div className="flex-1 flex items-center justify-center p-12 overflow-hidden">
                 <div 
-                    className={`w-full max-w-5xl aspect-video rounded-xl shadow-2xl flex flex-col p-12 transition-all duration-300 relative border border-white/5 ${
+                    className={`w-full max-w-5xl aspect-video rounded-2xl shadow-2xl flex flex-col p-16 transition-all duration-300 relative border border-slate-700/50 group ${
                         current.style?.layout === 'left' ? 'items-start text-left' : 'items-center text-center'
                     }`}
-                    style={{ backgroundColor: current.style?.bgColor || '#18181b' }}
+                    style={{ backgroundColor: current.style?.bgColor || '#1e293b' }}
                 >
+                    {/* Hover Hint */}
+                    <div className="absolute -top-10 left-0 w-full text-center text-slate-500 text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                        Editing Slide {activeSlide + 1}
+                    </div>
+
                     {/* EDITABLE TITLE */}
                     <textarea
                         value={current.questionText}
                         onChange={(e) => updateSlideContent('questionText', e.target.value)}
-                        placeholder="Type question here..."
-                        className={`bg-transparent resize-none outline-none font-extrabold placeholder-white/10 w-full mb-8 leading-tight ${current.style?.fontSize || 'text-4xl'}`}
+                        placeholder="Start typing your question..."
+                        className={`bg-transparent resize-none outline-none font-extrabold placeholder-white/20 w-full mb-8 leading-tight ${current.style?.fontSize || 'text-4xl'}`}
                         style={{ color: current.style?.textColor || '#fff' }}
                         rows={2}
                     />
 
                     {/* CONTENT AREA */}
                     {(current.type === 'mcq' || current.type === 'tf') && (
-                        <div className="w-full grid grid-cols-2 gap-4 mt-auto">
+                        <div className="w-full grid grid-cols-2 gap-6 mt-auto">
                             {current.options.map((opt, i) => (
-                                <div key={i} className="relative group">
+                                <div key={i} className="relative group/opt">
                                     <input
                                         value={opt}
                                         onChange={(e) => updateOption(i, e.target.value)}
                                         readOnly={current.type === 'tf'}
                                         placeholder={`Option ${i+1}`}
-                                        className={`w-full p-6 rounded-xl border font-bold text-xl outline-none transition-all shadow-lg ${
+                                        className={`w-full p-6 rounded-xl border-2 font-bold text-xl outline-none transition-all shadow-lg ${
                                             current.correctAnswer === opt && opt !== "" 
-                                            ? 'bg-green-500/20 border-green-500 text-green-100'
-                                            : 'bg-white/5 border-white/10 text-gray-200 focus:bg-white/10 focus:border-white/30'
+                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-100'
+                                            : 'bg-white/5 border-white/5 text-gray-100 focus:bg-white/10 focus:border-white/20'
                                         }`}
                                     />
                                     <button
                                         onClick={() => setCorrect(opt)}
-                                        className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition ${
+                                        className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all duration-300 ${
                                             current.correctAnswer === opt && opt !== "" 
-                                            ? 'text-green-400 opacity-100' 
-                                            : 'text-gray-600 opacity-0 group-hover:opacity-100 hover:text-white'
+                                            ? 'bg-emerald-500 text-white scale-100 opacity-100' 
+                                            : 'bg-slate-700 text-slate-400 scale-90 opacity-0 group-hover/opt:opacity-100 hover:bg-emerald-500 hover:text-white'
                                         }`}
+                                        title="Mark as Correct Answer"
                                     >
-                                        <CheckCircle size={24} fill={current.correctAnswer === opt && opt !== "" ? "currentColor" : "none"}/>
+                                        <CheckCircle size={20} />
                                     </button>
                                 </div>
                             ))}
@@ -365,8 +395,8 @@ const CreateManual = () => {
                          <textarea
                             value={current.options[0]}
                             onChange={(e) => updateOption(0, e.target.value)}
-                            placeholder="Add your description here..."
-                            className="bg-transparent resize-none outline-none w-full text-2xl opacity-70"
+                            placeholder="Add your description or subtitle here..."
+                            className="bg-transparent resize-none outline-none w-full text-2xl opacity-80 font-medium"
                             style={{ color: current.style?.textColor || '#fff', textAlign: current.style?.layout === 'left' ? 'left' : 'center' }}
                             rows={5}
                         />

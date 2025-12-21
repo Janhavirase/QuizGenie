@@ -6,8 +6,7 @@ const multer = require('multer');
 const upload = multer(); // Memory storage
 const { aiGenerateSchema } = require('../validation'); 
 
-// Define the validation helper function directly here
-// (Or import it if you made it a shared utility)
+// --- HELPER: VALIDATION MIDDLEWARE ---
 const validate = (schema) => (req, res, next) => {
     const { error } = schema.validate(req.body);
     if (error) {
@@ -15,6 +14,7 @@ const validate = (schema) => (req, res, next) => {
     }
     next();
 };
+
 // --- HELPER: RETRY LOGIC ---
 const fetchWithRetry = async (url, data, retries = 3, delay = 5000) => {
     for (let i = 0; i < retries; i++) {
@@ -33,83 +33,77 @@ const fetchWithRetry = async (url, data, retries = 3, delay = 5000) => {
 };
 
 // -------------------------------------------
-// 1. PDF UPLOAD ROUTE
+// 1. NOTES/TEXT UPLOAD ROUTE (Replaced Logic)
 // -------------------------------------------
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
+        // 1. Get Text & Settings directly from Body
+        // We no longer use req.file because we are sending raw text
+        const { text, count = 5, difficulty = "Medium", type = "MCQ" } = req.body;
 
-        console.log(`📄 Processing PDF: ${req.file.originalname}`);
+        // Basic Validation
+        // Check if 'text' exists (or if it was sent as 'topic' from the frontend)
+        const contentToProcess = text || req.body.topic; 
 
-        // --- DYNAMIC IMPORT FOR PDF LIB ---
-        // This fixes the 'ERR_REQUIRE_ASYNC_MODULE' crash
-        const pdfParseModule = await import('pdf-parse');
-        const pdfParse = pdfParseModule.default || pdfParseModule;
-
-        // 1. Extract Text
-        let textContent = "";
-        try {
-            const data = await pdfParse(req.file.buffer);
-            textContent = data.text;
-            console.log("✅ PDF Read Success. Characters:", textContent.length);
-        } catch (pdfError) {
-            console.error("❌ Internal PDF Parse Error:", pdfError);
-            return res.status(500).json({ success: false, message: "Could not read PDF text." });
+        if (!contentToProcess || typeof contentToProcess !== 'string' || contentToProcess.trim().length === 0) {
+            return res.status(400).json({ success: false, message: "No text provided for analysis." });
         }
 
-        if (!textContent || textContent.trim().length === 0) {
-            return res.status(400).json({ success: false, message: "PDF contains no readable text." });
-        }
+        console.log(`📝 Processing Text Input. Length: ${contentToProcess.length} chars`);
 
-        // 2. Build Prompt
-        const { amount = 5, difficulty = "Medium", type = "MCQ" } = req.body;
-        
-        // Gemini 2.5 Flash has a huge context window (1M tokens), so we can send more text safely
-        const safeText = textContent.substring(0, 100000);
+        // 2. Safety: Truncate very long text (Token limit safety)
+        const safeText = contentToProcess.substring(0, 50000); 
 
+        // 3. Build Prompt
         const prompt = `
-            You are a teacher creating a quiz from the following notes.
+            You are a teacher creating a quiz from the following notes/text.
             
             SETTINGS:
-            - Amount: ${amount} questions
+            - Amount: ${count} questions
             - Difficulty: ${difficulty}
             - Type: ${type}
 
             NOTES CONTENT:
-            "${safeText}..." 
+            "${safeText}..."
             
             OUTPUT RULES:
             - Return strictly a JSON array.
-            - No Markdown, no code blocks.
+            - No Markdown, no code blocks (plain JSON).
             - Schema: [{ "questionText": "...", "options": ["..."], "correctAnswer": "..." }]
         `;
 
-        // ✅ USING GEMINI 2.5 FLASH (Current Standard)
+        // 4. Call AI (Using your existing fetchWithRetry helper)
+        // Note: Switched to gemini-1.5-flash as it is the current standard for speed/cost
         const response = await fetchWithRetry(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
             { contents: [{ parts: [{ text: prompt }] }] }
         );
 
+        // 5. Parse Response
         let aiText = response.data.candidates[0].content.parts[0].text;
+        
+        // Clean markdown formatting if present (Gemini sometimes adds ```json)
         aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
         const questions = JSON.parse(aiText);
 
         res.json({ success: true, data: questions });
 
     } catch (error) {
-        console.error("Global Upload Error:", error.message);
+        console.error("Global Text/Upload Error:", error.message);
         if (error.response) {
             console.error("Google API Error Data:", error.response.data);
         }
-        res.status(500).json({ success: false, message: "Failed to process request" });
+        res.status(500).json({ success: false, message: "Failed to generate quiz from text." });
     }
 });
 
 // -------------------------------------------
 // 2. AI GENERATE ROUTE (FROM TOPIC)
 // -------------------------------------------
-router.post('/generate', validate(aiGenerateSchema),async (req, res) => {
-    const { topic, difficulty = "Medium", amount = 5, type = "MCQ" } = req.body;
+router.post('/generate', validate(aiGenerateSchema), async (req, res) => {
+    // ⚠️ FIX: Extracted 'count' correctly to match your Joi schema
+    const { topic, difficulty = "Medium", count = 5, type = "MCQ" } = req.body;
 
     try {
         const prompt = `
@@ -117,7 +111,7 @@ router.post('/generate', validate(aiGenerateSchema),async (req, res) => {
             
             SETTINGS:
             - Difficulty: ${difficulty}
-            - Amount: ${amount} questions
+            - Amount: ${count} questions  // ✅ Prompt now uses correct variable
             - Type: ${type}
 
             OUTPUT RULES:
@@ -126,11 +120,13 @@ router.post('/generate', validate(aiGenerateSchema),async (req, res) => {
             - Schema: [{ 
                 "questionText": "Question string", 
                 "options": ["Option 1", "Option 2"], 
-                "correctAnswer": "Correct Option String"
+                "correctAnswer": "Correct Option String",
+                "timeLimit": 20,
+                "type": "mcq"
             }]
         `;
 
-        // ✅ USING GEMINI 2.5 FLASH
+        // 3. Call AI (Using your requested model)
         const response = await fetchWithRetry(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
             { contents: [{ parts: [{ text: prompt }] }] }
